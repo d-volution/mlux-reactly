@@ -1,0 +1,12 @@
+
+**/__pycache__
+.venv
+
+# VSCode
+.vscode/
+.history/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
