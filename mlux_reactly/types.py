@@ -29,3 +29,9 @@ class Tool(ABC):
     @abstractmethod
     def run(input: dict) -> tuple[str, bool]:
         pass
+
+
+class DiagnosticHandler(ABC):
+    @abstractmethod
+    def event(name: str):
+        pass

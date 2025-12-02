@@ -1,11 +1,12 @@
 
 from .prompts import generate_react_prompt
-from .types import LLM, Message, Role, Tool
+from .types import LLM, Message, Role, Tool, DiagnosticHandler
+from .diagnostics import DiagnosticHandlerDefault
 import ollama
 
 
 
-def run_react(query: str, llm: LLM, tools: dict[str, Tool]) -> str:
+def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: DiagnosticHandler = DiagnosticHandlerDefault) -> str:
     history: list[Message] = []
     append_msg(history, Message(Role.System, generate_react_prompt(tools)))
     append_msg(history, Message(Role.User, f"Question: {query}"))
@@ -14,6 +15,7 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool]) -> str:
 
     while True:
         output = call_llm(history, llm)
+        diagnostic.event("llm_call_finished")
         
         for line in output.splitlines():
             append_msg(history, Message(Role.Assistant, f"{line}"))
