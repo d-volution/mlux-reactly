@@ -10,3 +10,5 @@
 # PyCharm / IntelliJ
 .idea/
 *.iml
+
+*_query_record.jsonl
