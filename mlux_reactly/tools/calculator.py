@@ -16,6 +16,14 @@ Us the tool the following way:
 Action: calculator
 Action Input: {{ "input": "your expression to be evaluated by numexpr" }}
 ---
+
+As an example:
+---
+Action: calculator
+Action Input: {{ "input": "sin(12.345)-2**3" }}
+---
+
+Do never write `np.sin`, `np.sqrt`, ... in the input!
 """
 
     @property
