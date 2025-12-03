@@ -25,7 +25,7 @@ class ReactlyAgent:
         self.recorder = recorder
 
     def query(self, user_query: str) -> str:
-        self.recorder.record_query(user_query)
-        response = run_react(user_query, llm=self.llm, tools=self.tools)
+        record = self.recorder.record_query(user_query)
+        response = run_react(user_query, llm=self.llm, tools=self.tools, diagnostics=record.diagnostics)
         self.recorder.on_response(response)
         return response

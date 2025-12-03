@@ -2,12 +2,11 @@ from typing import Optional, Any
 import json
 import ollama
 from .prompts import generate_react_prompt
-from .types import LLM, Message, Role, Tool, DiagnosticHandler
-from .diagnostics import DiagnosticHandlerDefault
+from .types import LLM, Message, Role, Tool
+from .diagnostics import Diagnostics
 
 
-
-def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: DiagnosticHandler = DiagnosticHandlerDefault()) -> str:
+def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diagnostics = Diagnostics()) -> str:
     history: list[Message] = []
     append_msg(history, Message(Role.System, generate_react_prompt(tools)))
     append_msg(history, Message(Role.User, f"Question: {query}"))
@@ -15,8 +14,8 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: Diagn
     expect_steps: list[str] = ["Thought", "Answer"]
 
     while True:
+        diagnostics.increment_counter("steps")
         output = call_llm(history, llm)
-        diagnostic.event("llm_call_finished")
         
         for line in output.splitlines():
             append_msg(history, Message(Role.Assistant, f"{line}"))
@@ -24,13 +23,17 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: Diagn
             step_body_parts = line.split(": ", 1)
             if len(step_body_parts) < 2:
                 append_msg(history, Message(Role.User, f"Error: This step has invalid format! Stick to format: `role: ...`"))
+                diagnostics.increment_counter("error_invalid_format")
                 break
 
             step, body = step_body_parts
 
             if step not in expect_steps:
                 append_msg(history, Message(Role.User, f"Error: Step '{step}' not expected at this point. Expect one of [{", ".join(expect_steps)}]."))
+                diagnostics.increment_counter("error_invalid_step")
                 break
+
+            diagnostics.increment_counter("step_" + step.lower().replace(" ", "_"))
 
             if step == "Thought":
                 expect_steps = ["Action", "Answer"]
@@ -39,6 +42,7 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: Diagn
                 tool_name = body.lower()
                 if tools.get(tool_name) == None:
                     append_msg(history, Message(Role.User, f"Error: Tool '{tool_name}' not found. Choose other Action or answer!"))
+                    diagnostics.increment_counter("error_tool_not_found")
                     break
                 
                 selected_tool = tools.get(tool_name)
