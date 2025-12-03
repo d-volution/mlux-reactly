@@ -15,8 +15,8 @@ You have access to the following tools:
 
 
 """
-        for tool in tools:
-            tool_desc += f"### `{tool.name}`\n"
+        for tool_name, tool in tools.items():
+            tool_desc += f"### `{tool_name}`\n"
             tool_desc += tool.desc
 
     return f"""

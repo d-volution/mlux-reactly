@@ -1,3 +1,4 @@
+from typing import Any
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -27,11 +28,11 @@ class Tool(ABC):
     desc: str
 
     @abstractmethod
-    def run(input: dict) -> tuple[str, bool]:
+    def run(self, input: dict[str, Any]) -> tuple[str, bool]:
         pass
 
 
 class DiagnosticHandler(ABC):
     @abstractmethod
-    def event(name: str):
+    def event(self, name: str):
         pass

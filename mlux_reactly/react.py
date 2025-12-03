@@ -1,16 +1,17 @@
-
+from typing import Optional, Any
+import json
+import ollama
 from .prompts import generate_react_prompt
 from .types import LLM, Message, Role, Tool, DiagnosticHandler
 from .diagnostics import DiagnosticHandlerDefault
-import ollama
 
 
 
-def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: DiagnosticHandler = DiagnosticHandlerDefault) -> str:
+def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: DiagnosticHandler = DiagnosticHandlerDefault()) -> str:
     history: list[Message] = []
     append_msg(history, Message(Role.System, generate_react_prompt(tools)))
     append_msg(history, Message(Role.User, f"Question: {query}"))
-    selected_tool: Tool = None
+    selected_tool: Optional[Tool] = None
     expect_steps: list[str] = ["Thought", "Answer"]
 
     while True:
@@ -44,7 +45,7 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostic: Diagn
                 expect_steps = ["Action Input"]
 
             elif step == "Action Input":
-                response, ok = selected_tool.run(body)
+                response, ok = run_tool(selected_tool, body)
                 if ok:
                     append_msg(history, Message(Role.User, f"Observation: {response}"))
                 else:
@@ -68,3 +69,10 @@ def call_llm(history: list[Message], llm: LLM) -> str:
         } for msg in history]
     )
     return response["message"]["content"]
+
+def run_tool(tool: Optional[Tool], input_as_json: str) -> tuple[str, bool]:
+    if tool == None:
+        return "The agent had some internal error. Tool could not be run.", False
+    else:
+        input = json.loads(input_as_json)
+        return tool.run(input)
