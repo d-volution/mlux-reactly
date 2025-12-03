@@ -24,8 +24,15 @@ class StepKind(Enum):
     SyntaxError = "syntax_error"
 
 class Tool(ABC):
-    name: str
-    desc: str
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def desc(self) -> str:
+        pass
 
     @abstractmethod
     def run(self, input: dict[str, Any]) -> tuple[str, bool]:
