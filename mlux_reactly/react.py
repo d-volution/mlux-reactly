@@ -49,7 +49,7 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diag
                 expect_steps = ["Action Input"]
 
             elif step == "Action Input":
-                response, ok = run_tool(selected_tool, body)
+                response, ok = run_tool(selected_tool, body, diagnostics)
                 if ok:
                     append_msg(history, Message(Role.User, f"Observation: {response}"))
                 else:
@@ -74,8 +74,9 @@ def call_llm(history: list[Message], llm: LLM) -> str:
     )
     return response["message"]["content"]
 
-def run_tool(tool: Optional[Tool], input_as_json: str) -> tuple[str, bool]:
+def run_tool(tool: Optional[Tool], input_as_json: str, diagnostics: Diagnostics) -> tuple[str, bool]:
     if tool == None:
+        diagnostics.increment_counter("error_internal_no_tool_to_run")
         return "The agent had some internal error. Tool could not be run.", False
     else:
         input = json.loads(input_as_json)
