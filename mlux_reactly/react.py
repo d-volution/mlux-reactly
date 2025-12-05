@@ -79,5 +79,10 @@ def run_tool(tool: Optional[Tool], input_as_json: str, diagnostics: Diagnostics)
         diagnostics.increment_counter("error_internal_no_tool_to_run")
         return "The agent had some internal error. Tool could not be run.", False
     else:
-        input = json.loads(input_as_json)
+        try:
+            input = json.loads(input_as_json)
+        except:
+            diagnostics.increment_counter("error_action_input_json_invalid")
+            return "The Action Input was not encoded as valid JSON.", False
+
         return tool.run(input)
