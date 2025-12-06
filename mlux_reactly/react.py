@@ -18,6 +18,9 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diag
         output = call_llm(history, llm)
         
         for line in output.splitlines():
+            if line == "":
+                continue
+
             append_msg(history, Message(Role.Assistant, f"{line}"))
 
             step_body_parts = line.split(": ", 1)
@@ -61,7 +64,11 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diag
                 return body
 
 def append_msg(history: list[Message], message: Message):
-    print(f"-> {message.role.name}: {message.content}")
+    if len(message.content) > 500:
+        print(f"-> {message.role.name}: {message.content[:500]}... (total size {len(message.content)})")
+    else:
+        print(f"-> {message.role.name}: {message.content}")
+
     history.append(message)
 
 def call_llm(history: list[Message], llm: LLM) -> str:
