@@ -14,12 +14,12 @@ The textcount tool counts numbers of characters, words and lines in a string.
 Use the tool like this:
 ---
 Action: textcount
-Action Input: {{ "input": "The text/string you want to know the counts about.\nIt can go over multiple lines." }}
+Action Input: {"input": "The text/string you want to know the counts about.\nIt can go over multiple lines."}
 ---
 
 The tool will respond like this:
 ---
-Observation: {{ "characters": number of characters, "words": number of words, "lines": number of lines }}
+Observation: {"characters": number of characters, "words": number of words, "lines": number of lines }
 ---
 """
 
