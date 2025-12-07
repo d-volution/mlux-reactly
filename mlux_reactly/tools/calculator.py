@@ -1,5 +1,5 @@
 from typing import Any
-import numexpr as ne
+import numexpr as ne # type: ignore
 from ..types import Tool
 
 class CalculatorTool(Tool):
@@ -14,13 +14,13 @@ This calculator tool evaluates an arithmetic expression and returns the result. 
 Us the tool the following way:
 ---
 Action: calculator
-Action Input: {{ "input": "your expression to be evaluated by numexpr" }}
+Action Input: { "input": "your expression to be evaluated by numexpr" }
 ---
 
 As an example:
 ---
 Action: calculator
-Action Input: {{ "input": "sin(12.345)-2**3" }}
+Action Input: {"input": "sin(12.345)-2**3"}
 ---
 
 Do never write `np.sin`, `np.sqrt`, ... in the input!
