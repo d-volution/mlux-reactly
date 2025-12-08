@@ -3,12 +3,9 @@ import json
 from ..types import Tool
 
 class TextCountTool(Tool):
-    _name: str
-    _desc: str
-    
     def __init__(self):
         self._name = "textcount"
-        self._desc = """
+        self._description = """
 The textcount tool counts numbers of characters, words and lines in a string.
 
 Use the tool like this:
@@ -23,13 +20,6 @@ Observation: {"characters": number of characters, "words": number of words, "lin
 ---
 """
 
-    @property
-    def name(self) -> str:
-        return self._name
-    
-    @property
-    def desc(self) -> str:
-        return self._desc
 
     def run(self, input: dict[str, Any]) -> tuple[str, bool]:
         s: str = input["input"]

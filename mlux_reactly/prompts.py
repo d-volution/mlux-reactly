@@ -17,7 +17,7 @@ You have access to the following tools:
 """
         for tool_name, tool in tools.items():
             tool_desc += f"### `{tool_name}`\n"
-            tool_desc += tool.desc
+            tool_desc += tool.description
 
     return f"""
 You are designed to help with a variety of tasks, from answering questions to providing summaries to other types of analyses.

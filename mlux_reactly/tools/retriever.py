@@ -12,13 +12,11 @@ from ..types import Tool
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class RetrieverTool(Tool):
-    _name: str
-    _desc: str
     retriever: BaseRetriever
     
     def __init__(self, retriever: BaseRetriever):
         self._name = "retriever"
-        self._desc = """
+        self._description = """
 The retriever tool can retrieve certain documents (mostly locally on the same machine). Documents can be queried by search terms. Kinda like a RAG.
 
 Use the tool like this:
@@ -52,14 +50,6 @@ Each result (document) will be one object in the list.
         retriever = index.as_retriever()
         return RetrieverTool(retriever)
 
-
-    @property
-    def name(self) -> str:
-        return self._name
-    
-    @property
-    def desc(self) -> str:
-        return self._desc
 
     def run(self, input: dict[str, Any]) -> tuple[str, bool]:
         query: str = input["input"]
