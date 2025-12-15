@@ -6,9 +6,9 @@ from .types import LLM, Message, Role, Tool
 from .diagnostics import Diagnostics
 
 
-def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diagnostics = Diagnostics()) -> str:
+def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diagnostics = Diagnostics(), system_prompt: str|None = None) -> str:
     history: list[Message] = []
-    append_msg(history, Message(Role.System, generate_react_prompt(tools)))
+    append_msg(history, Message(Role.System, system_prompt or generate_react_prompt(tools)))
     append_msg(history, Message(Role.User, f"Question: {query}"))
     selected_tool: Optional[Tool] = None
     expect_steps: list[str] = ["Thought", "Answer"]

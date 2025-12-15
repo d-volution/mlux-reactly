@@ -26,8 +26,8 @@ class Recorder:
 
     queries: List[QueryRecord] = []
 
-    def __init__(self, session=str(datetime.now().timestamp()), file=None):
-        self.session = session
+    def __init__(self, session: str = "", file=None):
+        self.session = session=str(datetime.now().timestamp()) + session
         self.file = file
 
     def record_query(self, query: str) -> QueryRecord:

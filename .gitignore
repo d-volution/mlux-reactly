@@ -11,4 +11,9 @@
 .idea/
 *.iml
 
+# Python
+*.egg-info/
+
+# other
+
 *_query_record.jsonl

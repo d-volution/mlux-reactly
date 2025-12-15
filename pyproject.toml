@@ -1,0 +1,12 @@
+[project]
+name = "mlux-reactly"
+description = "A ReAct inspired Agent from scratch"
+version = "0.1"
+authors = [
+  {name = "Donovan Käfer", email = "donovank00@unet.univie.ac.at"},
+]
+requires-python = ">=3.12"
+dependencies = [
+  "numexpr>=2.10",
+  "ollama>=0.5",
+]
