@@ -4,11 +4,12 @@ from .react import run_react
 from .recorder import Recorder, ZeroRecorder
 
 class ReactlyAgent:
-    name: str
+    name: str = "ReactlyAgent"
     description: str
     llm: LLM
     tools: dict[str, Tool]
     recorder: Recorder
+    verbose: bool
 
     def __init__(
         self,
@@ -16,16 +17,18 @@ class ReactlyAgent:
         name: str = "ReactlyAgent",
         description: str = "",
         tools: List[Tool] = [],
-        recorder: Recorder = ZeroRecorder()
+        recorder: Recorder = ZeroRecorder(),
+        verbose: bool = False
     ):
         self.name = name
         self.description = description
         self.llm = llm
         self.tools = {tool.name: tool for tool in tools}
         self.recorder = recorder
+        self.verbose = verbose
 
     def query(self, user_query: str) -> str:
         record = self.recorder.record_query(user_query)
-        response = run_react(user_query, llm=self.llm, tools=self.tools, diagnostics=record.diagnostics)
+        response = run_react(user_query, llm=self.llm, tools=self.tools, diagnostics=record.diagnostics, verbose=self.verbose)
         self.recorder.on_response(response)
         return response

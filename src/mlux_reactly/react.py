@@ -6,7 +6,7 @@ from .types import LLM, Message, Role, Tool
 from .diagnostics import Diagnostics
 
 
-def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diagnostics = Diagnostics(), system_prompt: str|None = None) -> str:
+def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diagnostics = Diagnostics(), system_prompt: str|None = None, verbose = False) -> str:
     history: list[Message] = []
     append_msg(history, Message(Role.System, system_prompt or generate_react_prompt(tools)))
     append_msg(history, Message(Role.User, f"Question: {query}"))
@@ -63,11 +63,12 @@ def run_react(query: str, llm: LLM, tools: dict[str, Tool], *, diagnostics: Diag
             elif step == "Answer":
                 return body
 
-def append_msg(history: list[Message], message: Message):
-    if len(message.content) > 500:
-        print(f"-> {message.role.name}: {message.content[:500]}... (total size {len(message.content)})")
-    else:
-        print(f"-> {message.role.name}: {message.content}")
+def append_msg(history: list[Message], message: Message, verbose: bool = False):
+    if verbose:
+        if len(message.content) > 500:
+            print(f"-> {message.role.name}: {message.content[:500]}... (total size {len(message.content)})")
+        else:
+            print(f"-> {message.role.name}: {message.content}")
 
     history.append(message)
 
@@ -92,4 +93,8 @@ def run_tool(tool: Optional[Tool], input_as_json: str, diagnostics: Diagnostics)
             diagnostics.increment_counter("error_action_input_json_invalid")
             return "The Action Input was not encoded as valid JSON.", False
 
-        return tool.run(input)
+        try:
+            return tool.run(input)
+        except:
+            diagnostics.increment_counter("error_tool_crash")
+            return "The tool crashed while running.", False
