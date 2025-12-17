@@ -2,6 +2,9 @@ from typing import Any
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from io import StringIO
+from .diagnostics import Diagnostics
+from .recorder import Recorder
 
 class Role(Enum):
     System = "system"
@@ -44,3 +47,16 @@ class DiagnosticHandler(ABC):
     @abstractmethod
     def event(self, name: str):
         pass
+
+@dataclass
+class BaseAgent:
+    agent_name: str
+    llm: LLM
+    system_prompt: str
+    tools: dict[str, Tool]
+
+@dataclass
+class RunConfig:
+    diagnostics: Diagnostics = Diagnostics()
+    stream: StringIO|None = None
+    recorder: Recorder = Recorder

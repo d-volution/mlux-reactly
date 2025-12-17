@@ -1,34 +1,31 @@
 from typing import Any, Callable, Dict, List, Sequence, Optional, Union, Type, cast
-from .types import Tool, LLM
+from io import StringIO
+from .types import Tool, LLM, BaseAgent, RunConfig
 from .react import run_react
 from .recorder import Recorder, ZeroRecorder
+from .prompts import generate_react_prompt
 
-class ReactlyAgent:
-    name: str = "ReactlyAgent"
-    description: str
-    llm: LLM
-    tools: dict[str, Tool]
-    recorder: Recorder
-    verbose: bool
+class ReactlyAgent(BaseAgent):
+    runConfig: RunConfig
 
     def __init__(
         self,
         llm: LLM,
-        name: str = "ReactlyAgent",
-        description: str = "",
         tools: List[Tool] = [],
+        *,
+        name: str = "ReactlyAgent",
         recorder: Recorder = ZeroRecorder(),
-        verbose: bool = False
+        stream: StringIO|None = None
     ):
         self.name = name
-        self.description = description
         self.llm = llm
         self.tools = {tool.name: tool for tool in tools}
-        self.recorder = recorder
-        self.verbose = verbose
+        self.system_prompt = generate_react_prompt(self.tools)
+
+        self.runConfig = RunConfig(recorder=recorder, stream=stream)
 
     def query(self, user_query: str) -> str:
-        record = self.recorder.record_query(user_query)
-        response = run_react(user_query, llm=self.llm, tools=self.tools, diagnostics=record.diagnostics, verbose=self.verbose)
-        self.recorder.on_response(response)
+        record = self.runConfig.recorder.record_query(user_query)
+        response = run_react(user_query, self, self.runConfig)
+        self.runConfig.recorder.on_response(response)
         return response
