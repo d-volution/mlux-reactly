@@ -16,8 +16,8 @@ def run_react(query: str, agent: BaseAgent, run_config: RunConfig) -> str:
     def stream_print(*values: object):
         print(*values, file=run_config.stream)
 
-    def append_msg(message: Message):
-        if run_config.stream != None:
+    def append_msg(message: Message, *, quiet: bool = False):
+        if not quiet and run_config.stream != None:
             if len(message.content) > 500:
                 stream_print(f"-> {message.role.name}: {message.content[:500]}... (total size {len(message.content)})")
             else:
@@ -52,7 +52,7 @@ def run_react(query: str, agent: BaseAgent, run_config: RunConfig) -> str:
                 diagnostics.increment_counter("error_tool_crash")
                 return "The tool crashed while running.", False
 
-    append_msg(Message(Role.System, agent.system_prompt))
+    append_msg(Message(Role.System, agent.system_prompt), quiet=True)
     append_msg(Message(Role.User, f"Question: {query}"))
     selected_tool: Optional[Tool] = None
     expect_steps: list[str] = ["Thought", "Answer"]
