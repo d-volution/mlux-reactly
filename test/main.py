@@ -1,9 +1,16 @@
-from mlux_reactly import ReactlyAgent
+from mlux_reactly import ReactlyAgent, NormalTracer
 from mlux_reactly.types import LLM
 from typing import Annotated, List
 import json
+import sys
+import io
 
 print("start")
+
+class StdoutStringIO(io.StringIO):
+    def write(self, s):
+        sys.stdout.write(s)
+        return len(s)
 
 def candle_light(candle_type: str):
     """This tool calculates the brightness for a candle light of some candle type."""
@@ -18,7 +25,9 @@ def calculator(expression: Annotated[str, "some kind of math expr"]):
 def geo_3d(from_system: str, to_system: str, from_coordinates: str):
     """A tool to convert between different kinds of earth coordinate systems."""
 
-agent = ReactlyAgent(tools=[candle_light, history_calendar, geo_3d, calculator])
+agent = ReactlyAgent(tools=[candle_light, history_calendar, geo_3d, calculator], 
+                     tracer=NormalTracer(stream=StdoutStringIO(), 
+                                         record_file=open("reactly_query_record.jsonl", "+a")))
 
 
 """
@@ -31,4 +40,10 @@ print(agent.query("What degrees does Philip J. Pierre holds from the University 
 
 #print(agent.query("What does, if anything, Philip J. Pierre and Anton Zeilinger have in common? Try invoke at least one subagent before answering this."))
 
-agent.query("How many years passed between when Napoleon became King of Italy and when the first world war ended?")
+def query(user_question: str):
+    print(">>> " + user_question)
+    response = agent.query(user_question)
+    print(response + "\n")
+
+
+query("How many years passed between when Napoleon became King of Italy and when the first world war ended?")

@@ -1,4 +1,5 @@
 from typing import Callable, Any, Dict
+from typing import Protocol
 from dataclasses import dataclass
 
 @dataclass
@@ -21,3 +22,8 @@ class TaskResult:
 class ChatQA:
     question: str
     response: str
+
+class Tracer(Protocol):
+    def on(self, key: str, args: Dict[str, Any]) -> "Tracer": ...
+    def add_arg(self, arg_name: str, arg: Any): ...
+    def reset(self): ...

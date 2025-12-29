@@ -3,7 +3,8 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 import json
 import ollama
-from .types import LLM, Tool, TaskResult, ChatQA
+from .types import LLM, Tool, TaskResult, ChatQA, Tracer
+from .diagnostics import Diagnostics
 
 # helper
 
@@ -34,7 +35,7 @@ def stage_call_llm(sys_prompt: str, query_msg: str, llm: LLM, *, decode_json: bo
         CtxMessage(Role.System, sys_prompt),
         CtxMessage(Role.User, query_msg)
     ], llm)
-    print(f"-> {query_msg}{llm_response}\n")
+    #print(f"-> {query_msg}{llm_response}\n")
     if not decode_json:
         return llm_response
     
@@ -52,7 +53,7 @@ class ToolCall:
 
 
 def run_tool(tool: Tool, input: Dict[str, Any]) -> str:
-    print("run tool", tool, input)
+    #print("run tool", tool, input)
     return "no result"
 
 
@@ -72,7 +73,8 @@ def format_tool_calls(tool_calls: List[ToolCall]) -> str:
 
 # stages
 
-def split_user_question(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM) -> List[str]:
+def split_user_question(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> List[str]:
+    tracer = caller_tracer.on("split_user_question", locals())
     SYS_PROMPT = """You are a task-splitting system.
 
 Your job is to decompose the user Question into the minimal ordered list of atomic Tasks required to answer it.
@@ -146,7 +148,7 @@ Answer: """
 
 
 
-def choose_tool(task_description: str, tools: List[Tool], llm: LLM) -> Tool:
+def choose_tool(task_description: str, tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> Tool:
     SYS_PROMPT = """You are a tool choser.
 
 Your job is to select one of the Tools to be called next. The History shows the previous Tool calls including the input to the Tool and the output from it.
@@ -176,7 +178,6 @@ Task: {task_description}
 History: []
 Chosen Tool: """
     tool_name = stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
-    print("tool name", tool_name)
     tool = next((tool for tool in tools if tool.name == tool_name), None)
     return tool
 
@@ -255,23 +256,29 @@ Answer: """
 
 # main
 
-def run_subtask(task_description: str, tools: List[Tool], results: List[TaskResult], llm: LLM) -> str:
-    chosen_tool = choose_tool(task_description, tools, llm)
+def run_subtask(task_description: str, tools: List[Tool], results: List[TaskResult], llm: LLM, caller_tracer = Tracer) -> str:
+    tracer = caller_tracer.on("run_subtask", locals())
+
+    chosen_tool = choose_tool(task_description, tools, llm, tracer)
     tool_input = make_tool_input(task_description, chosen_tool, llm)
     tool_result = run_tool(chosen_tool, tool_input)
     tool_calls = [ToolCall(chosen_tool.name, tool_input, tool_result)]
-    return answer_subtask(task_description, tool_calls, llm)
+    subanswer = answer_subtask(task_description, tool_calls, llm)
+    tracer.on("answer", {'answer': subanswer})
+    return subanswer
 
 
-
-def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM) -> str:
+def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, agent_tracer: Tracer) -> str:
+    tracer = agent_tracer.on("run_query", locals())
     subtask_results: List[TaskResult] = []
     
-    subtasks = split_user_question(user_question, history, tools, llm)
+    subtasks = split_user_question(user_question, history, tools, llm, tracer)
 
     for subtask in subtasks:
-        result = run_subtask(subtask, tools, subtask_results, llm)
+        result = run_subtask(subtask, tools, subtask_results, llm, tracer)
         subtask_results.append(TaskResult(subtask, result))
 
     answer = answer_user_question(user_question, history, subtask_results, llm)
+    tracer.add_arg("answer", answer)
+    tracer.reset()
     return answer
