@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from io import StringIO, TextIOWrapper
 import json
-from .types import Tracer
+from .types import Tracer, Tool
 
 
 
@@ -29,7 +29,7 @@ class Diagnostics:
         else:
             return datetime.fromtimestamp(self.timepoints[key])
 
-    def set_timepoint(self, key: str, timepoint: datetime):
+    def set_timepoint(self, key: str, timepoint: datetime = datetime.now()):
         self.timepoints[key] = timepoint.timestamp()
     
     def increment_counter(self, key: str):
@@ -86,6 +86,7 @@ class NormalTracer(Tracer):
         self.event.args[arg_name] = arg
 
     def reset(self):
+        self.diagnostics.set_timepoint("finished")
         self_as_dict = {
             'session': str(self.event.time.timestamp()) + self.event.key,
             'query': self.event.args['user_question'],
@@ -100,11 +101,23 @@ class NormalTracer(Tracer):
         key = event.key
         args = event.args
 
+        NONE_TOOL = Tool("None", "None", {}, lambda *a, **k: None)
+
         details = ""
-        if key == "run_subtask":
+        if key == "run_query":
+            self.diagnostics.set_timepoint("run_query")
+        elif key == "run_subtask":
             details = f"{args['task_description']}"
+        elif key == "choose_tool":
+            as_dict = {tool.name: tool.doc for tool in (tool or NONE_TOOL for tool in event.arg("tools"))}
+            details = f"tools: {json.dumps(as_dict)}"
         elif key == "answer":
             details = f"{args['answer']}"
+        elif key == "result":
+            details = event.arg("result")
+        elif key == "run_tool":
+            tool: Tool = event.arg("tool", Tool("None", "None", {}, lambda *args, **kwargs: None))
+            details = tool.name + " " + json.dumps(event.arg("input"))
 
         print(f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}", file=self.stream)
 

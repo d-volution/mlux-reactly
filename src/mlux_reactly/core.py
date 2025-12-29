@@ -35,7 +35,7 @@ def stage_call_llm(sys_prompt: str, query_msg: str, llm: LLM, *, decode_json: bo
         CtxMessage(Role.System, sys_prompt),
         CtxMessage(Role.User, query_msg)
     ], llm)
-    #print(f"-> {query_msg}{llm_response}\n")
+
     if not decode_json:
         return llm_response
     
@@ -52,13 +52,17 @@ class ToolCall:
     output: Any
 
 
-def run_tool(tool: Tool, input: Dict[str, Any]) -> str:
-    #print("run tool", tool, input)
-    return "no result"
-
+def run_tool(tool: Tool, input: Dict[str, Any], caller_tracer: Tracer) -> str:
+    tracer = caller_tracer.on("run_tool", locals())
+    try:
+        result = str(tool.run(**input))
+        tracer.on("tool_result", {'result': result})
+    except Exception as e:
+        result = f"tool failed: {e}"
+        tracer.on("tool_failure", {'result': result})
+    return result
 
 def format_tools(tools: List[Tool]) -> str:
-    #as_dict = {tool.name: {'description': tool.doc, 'input format': tool.input_doc} for tool in tools}
     as_dict = {tool.name: tool.doc for tool in tools}
     return json.dumps(as_dict)
 
@@ -144,11 +148,12 @@ History: {format_chat_history(history)}
 Question: {user_question}
 Results: {format_subtask_results(subtask_results)}
 Answer: """
-    return stage_call_llm(SYS_PROMPT, query_msg, llm)
+    return stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
 
 
 
 def choose_tool(task_description: str, tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> Tool:
+    tracer = caller_tracer.on(choose_tool.__name__, locals())
     SYS_PROMPT = """You are a tool choser.
 
 Your job is to select one of the Tools to be called next. The History shows the previous Tool calls including the input to the Tool and the output from it.
@@ -182,7 +187,11 @@ Chosen Tool: """
     return tool
 
 
-def make_tool_input(task_description: str, tool: Tool, llm: LLM) -> Any:
+def make_tool_input(task_description: str, tool: Tool|None, llm: LLM, caller_tracer: Tracer) -> Any:
+    trace = caller_tracer.on(make_tool_input.__name__, locals())
+    if tool == None:
+        return None
+
     EXAMPLE_TOOL_SQR_MATH_DESCR = """A tool to square any real number.
 
 Input only a single number (as a valid JSON-formatted number). The tool will return the square of the number.
@@ -225,7 +234,8 @@ Input: """
     return stage_call_llm(SYS_PROMPT, query_msg, llm)
 
 
-def answer_subtask(task_description: str, tool_calls: List[ToolCall], llm: LLM) -> Any:
+def answer_subtask(task_description: str, tool_calls: List[ToolCall], llm: LLM, caller_tracer: Tracer) -> Any:
+    tracer = caller_tracer.on(answer_subtask.__name__, locals())
     SYS_PROMPT = """You are a context summarizer.
 
 Your job is to Answer the Task using the History of performed tool calls.
@@ -260,10 +270,10 @@ def run_subtask(task_description: str, tools: List[Tool], results: List[TaskResu
     tracer = caller_tracer.on("run_subtask", locals())
 
     chosen_tool = choose_tool(task_description, tools, llm, tracer)
-    tool_input = make_tool_input(task_description, chosen_tool, llm)
-    tool_result = run_tool(chosen_tool, tool_input)
+    tool_input = make_tool_input(task_description, chosen_tool, llm, tracer)
+    tool_result = run_tool(chosen_tool, tool_input, tracer)
     tool_calls = [ToolCall(chosen_tool.name, tool_input, tool_result)]
-    subanswer = answer_subtask(task_description, tool_calls, llm)
+    subanswer = answer_subtask(task_description, tool_calls, llm, tracer)
     tracer.on("answer", {'answer': subanswer})
     return subanswer
 

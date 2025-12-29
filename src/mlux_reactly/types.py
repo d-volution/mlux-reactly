@@ -1,4 +1,4 @@
-from typing import Callable, Any, Dict
+from typing import Callable, Any, Dict, Tuple
 from typing import Protocol
 from dataclasses import dataclass
 
@@ -7,7 +7,7 @@ class Tool:
     name: str
     doc: str
     input_doc: Dict
-    run: Callable
+    run: Callable[[Any], str]
 
 @dataclass
 class LLM:
