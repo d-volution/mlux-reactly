@@ -9,7 +9,7 @@ class StdoutStringIO(io.StringIO):
         return len(s)
 
 
-tracer = NormalTracer(stream=StdoutStringIO(), record_file=open("reactly_query_record.jsonl", "+a"))
+tracer = NormalTracer(name="main", stream=StdoutStringIO(), record_file=open("reactly_query_record.jsonl", "+a"))
 agent = ReactlyAgent(tools=[calculator, text_count], tracer=tracer)
 
 
