@@ -4,7 +4,7 @@ from dataclasses import dataclass, asdict
 import json
 import ollama
 from .types import LLM, Tool, NO_TOOL, TaskResult, ChatQA, Tracer
-from .diagnostics import Diagnostics
+from .diagnostics import Diagnostics, tracer_initialize_on_query, tracer_finish_with_response
 
 # helper
 
@@ -279,7 +279,7 @@ def run_subtask(task_description: str, tools: List[Tool], results: List[TaskResu
 
 
 def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, agent_tracer: Tracer) -> str:
-    tracer = agent_tracer.on("run_query", locals())
+    tracer = tracer_initialize_on_query(agent_tracer, user_question)
     subtask_results: List[TaskResult] = []
     
     subtasks = split_user_question(user_question, history, tools, llm, tracer)
@@ -289,6 +289,6 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
         subtask_results.append(TaskResult(subtask, result))
 
     answer = answer_user_question(user_question, history, subtask_results, llm)
-    tracer.add_arg("answer", answer)
-    tracer.reset()
+
+    tracer_finish_with_response(tracer, answer)
     return answer

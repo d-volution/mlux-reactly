@@ -52,7 +52,7 @@ class Event:
         return asdict(self)
 
     def arg(self, name: str, alternative: Any = None) -> Any:
-        return self.args[name] or alternative
+        return self.args.get(name, alternative)
 
 
 class NormalTracer(Tracer):
@@ -63,12 +63,15 @@ class NormalTracer(Tracer):
     record_file: TextIOWrapper|None
 
     def __init__(self, *, 
-                 event: Event = Event("root", {}, [], datetime.now()), 
+                 name: str|None = None,
+                 event: Event = Event("", {}, [], datetime.now()), 
                  level: int = 0, 
                  diagnostics = Diagnostics(),
                  stream: StringIO|None = None,
                  record_file: TextIOWrapper|None = None):
         self.event = event
+        if name is not None:
+            self.event.key = name
         self.level = level
         self.diagnostics = diagnostics
         self.stream = stream
@@ -77,6 +80,8 @@ class NormalTracer(Tracer):
     def on(self, key: str, args: Dict[str, Any]) -> "NormalTracer":
         time = datetime.now()
         self.diagnostics.increment_counter(key)
+        if key == "run_query":
+            args['session_name'] = self.event.key
         event = Event(key, args, [], time)
         self.event.sub.append(event)
         self._log(event)
@@ -88,9 +93,9 @@ class NormalTracer(Tracer):
     def reset(self):
         self.diagnostics.set_timepoint("finished")
         self_as_dict = {
-            'session': str(self.event.time.timestamp()) + self.event.key,
-            'query': self.event.args['user_question'],
-            'response': self.event.arg("answer", ""),
+            'session': str(self.event.time.timestamp()) + self.event.arg('session_name', "session"),
+            'query': self.event.arg('user_question', ""),
+            'response': self.event.arg("agent_response", ""),
             'diagnostics': self.diagnostics.as_dict()
         }
 
@@ -130,3 +135,15 @@ class ZeroTracer(Tracer):
         pass
     def add_arg(self, arg_name, arg):
         return
+    
+
+def tracer_initialize_on_query(agent_tracer: Tracer, user_question: str) -> Tracer:
+    tracer = agent_tracer.on("run_query", {
+        'user_question': user_question
+    })
+    return tracer
+
+def tracer_finish_with_response(tracer: Tracer, agent_response: str):
+    tracer.add_arg("agent_response", agent_response)
+    tracer.reset()
+
