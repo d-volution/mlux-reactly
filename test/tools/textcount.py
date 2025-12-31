@@ -10,4 +10,4 @@ def text_count(text: Annotated[str, """The text string to be counted"""]) -> str
         'words': len(text.split()),
         'lines': len(text.splitlines())
     }
-    return json.dumps(r), True
+    return json.dumps(r)
