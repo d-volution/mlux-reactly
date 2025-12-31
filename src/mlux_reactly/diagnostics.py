@@ -113,7 +113,7 @@ class NormalTracer(Tracer):
             details = f"tools: {json.dumps(as_dict)}"
         elif key == "answer":
             details = f"{args['answer']}"
-        elif key == "result":
+        elif key in ["result", "tool_result", "tool_failure"]:
             details = event.arg("result")
         elif key == "run_tool":
             tool: Tool = event.arg("tool", Tool("None", "None", {}, lambda *args, **kwargs: None))
