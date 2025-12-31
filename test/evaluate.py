@@ -2,10 +2,9 @@ import math
 import random
 import re
 import numexpr as ne
-from io import StringIO
-from mlux_reactly import ReactlyAgent, Recorder
-from mlux_reactly.types import LLM, RunConfig, Diagnostics
-from mlux_reactly.tools import CalculatorTool
+from mlux_reactly import ReactlyAgent, NormalTracer
+from mlux_reactly.types import LLM
+from tools import calculator, text_count, make_rag_tool
 
 random.seed(12042)
 record_file=open("reactly_eval_query_record.jsonl", "+a")
@@ -27,7 +26,6 @@ def evaluate_calc_1():
         calc_1_sinus_of,
         calc_1_sinus_of_degrees
     ]
-    stats = []
 
     for example in examples:
         per_ex_stats = {
@@ -37,8 +35,9 @@ def evaluate_calc_1():
         }
 
         for _ in range(10):
-            agent = ReactlyAgent(llm = llm, tools=[CalculatorTool()])
-            agent.runConfig = RunConfig(Diagnostics(), StringIO(), Recorder(f"eval_{example.__name__}", record_file))
+            tracer = NormalTracer(name=f"eval_{example.__name__}", record_file=record_file)
+            agent = ReactlyAgent(llm = llm, tools=[calculator], tracer=tracer)
+            
             a = random.randint(-100000000, 100000000)
             question, truth = example(a)
 
@@ -52,8 +51,6 @@ def evaluate_calc_1():
                 per_ex_stats['nr_correct'] += 1
             else:
                 per_ex_stats['nr_incorrect'] += 1
-                #rint(agent.runConfig.stream.getvalue())
-                #rint("\n")
 
         print("------------------------------------------------------------------")
         for key, val in per_ex_stats.items():
