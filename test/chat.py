@@ -1,7 +1,6 @@
 import sys
 import io
-from mlux_reactly import ReactlyAgent, NormalTracer
-from mlux_reactly.types import LLM
+from mlux_reactly import ReactlyAgent, NormalTracer, LLM
 from tools import calculator, text_count, make_rag_tool
 
 
