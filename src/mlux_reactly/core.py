@@ -3,7 +3,7 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 import json
 import ollama
-from .types import LLM, Tool, TaskResult, ChatQA, Tracer
+from .types import LLM, Tool, NO_TOOL, TaskResult, ChatQA, Tracer
 from .diagnostics import Diagnostics
 
 # helper
@@ -183,7 +183,7 @@ Task: {task_description}
 History: []
 Chosen Tool: """
     tool_name = stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
-    tool = next((tool for tool in tools if tool.name == tool_name), None)
+    tool = next((tool for tool in tools if tool.name == tool_name), NO_TOOL)
     return tool
 
 

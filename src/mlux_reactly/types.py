@@ -7,7 +7,9 @@ class Tool:
     name: str
     doc: str
     input_doc: Dict
-    run: Callable[[Any], str]
+    run: Callable[..., str]
+
+NO_TOOL = Tool("", "The No Tool. This tool does not exist and does nothing when called.", {}, lambda **kwargs: "")
 
 @dataclass
 class LLM:
