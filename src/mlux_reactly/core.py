@@ -43,7 +43,7 @@ def stage_call_llm(sys_prompt: str, query_msg: str, llm: LLM, *, decode_json: bo
         decoded = json.loads(llm_response)
         return decoded
     except:
-        return json.dumps(llm_response)    
+        return json.dumps(llm_response)
 
 @dataclass
 class ToolCall:
@@ -66,6 +66,9 @@ def format_tools(tools: List[Tool]) -> str:
     as_dict = {tool.name: tool.doc for tool in tools}
     return json.dumps(as_dict)
 
+def format_tool_verbose(tool: Tool):
+    return json.dumps({'tool_name': tool.name, 'description': tool.doc, 'input format': tool.input_doc})
+
 def format_chat_history(history: List[ChatQA]) -> str:
     return json.dumps([asdict(qa) for qa in history])
 
@@ -75,11 +78,24 @@ def format_subtask_results(results: List[TaskResult]) -> str:
 def format_tool_calls(tool_calls: List[ToolCall]) -> str:
     return json.dumps([asdict(tool_call) for tool_call in tool_calls])
 
+TOOLS_FORMAT_LINE = """{"tool name": "tool description", ...more tools...}"""
+EXAMPLE_TOOLS = [
+    Tool("sqr_math", "A tool to square any real number.", {"number": "The number that should be squared"}, lambda **kwargs: ""),
+    Tool("wood", "This tool returns basic properties of a kind of wood", {"": ""}, lambda **kwargs: ""),
+    Tool("cowork_db", "DB to look up coworker info.", {"": ""}, lambda **kwargs: ""),
+    Tool("hex_color", "Retuns the color code for an inputted color name", {"": ""}, lambda **kwargs: "")
+]
+
+SUBTASK_RESULTS_FORMAT_LINE = """[{"task": "description of a finished task", "result": "result of the finished task"}, ...]"""
+
+TOOL_VERBOSE_FORMAT_LINE = """{"tool_name": "name of tool", "description": "describes the tool", "input format": {"parameter name": "description per input parameter"}}"""
+
+
 # stages
 
 def split_user_question(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> List[str]:
     tracer = caller_tracer.on("split_user_question", locals())
-    SYS_PROMPT = """You are a task-splitting system.
+    SYS_PROMPT = f"""You are a task-splitting system.
 
 Your job is to decompose the user Question into the minimal ordered list of atomic Tasks required to answer it.
 
@@ -99,13 +115,13 @@ Your job is to decompose the user Question into the minimal ordered list of atom
 
 The format looks like this:
 
-Tools: {"tool name": "tool description", ...more tools...}
+Tools: {TOOLS_FORMAT_LINE}
 Question: the question (i.e. main task) from the user to be splitted into (sub) tasks
 Tasks: ["task 1", "task 2", ...]
 
 # GOOD Examples
 
-Tools: {"sqr_math": "A tool to square any real number.", "wood": "This tool returns basic properties of a kind of wood.", "cowork_db": "DB to look up coworker info.", "hex_color": "Retuns the color code for an inputted color name"}
+Tools: {format_tools(EXAMPLE_TOOLS)}
 Question: What is the sqare of the year the coworker Mike was born?
 Tasks: ["Find out the date of birth for coworker Mike.", "Square the year number of the date of birth."]
 
@@ -120,7 +136,7 @@ Tasks: """
 
 
 def answer_user_question(user_question: str, history: List[ChatQA], subtask_results: List[TaskResult], llm: LLM) -> str:
-    SYS_PROMPT = """You are a helpful answer generator.
+    SYS_PROMPT = f"""You are a helpful answer generator.
 
 Your job is to answer the user Question by using the Results of the subtasks.
 
@@ -128,16 +144,19 @@ Your job is to answer the user Question by using the Results of the subtasks.
 
 The format looks like this:
 
-History: [{"question": "First question asked by user on a previous query.", "response": "response from the agent for the first question"}, ...]
+History: [{{"question": "First question asked by user on a previous query.", "response": "response from the agent for the first question"}}, ...]
 Question: the user Question you should answer
-Results: [{"task": "description of subtask 1", "result": "result of subtask 1"}, ...]
+Results: {SUBTASK_RESULTS_FORMAT_LINE}
 Answer: your answer based on the Results
 
 # GOOD Examples
 
 History: []
 Question: Do Mark and Elisa drive the same type of car?
-Results: [{"task": "Determine what type of car Mark drives.", "result": "Mark drives an Audi A4."}, {"task": "Determine what type of car Elisa drives.", "result": "Elisa drives both a Tesla Model 3 and a Audi A4."}]
+Results: {format_subtask_results([
+    TaskResult("Determine what type of car Mark drives.", "Mark drives an Audi A4."), 
+    TaskResult("Determine what type of car Elisa drives.", "Elisa drives both a Tesla Model 3 and a Audi A4.")
+    ])}
 Answer: Yes, both drive a Audi A4.
 
 # Conversation
@@ -153,7 +172,7 @@ Answer: """
 
 def enhance_task_description(task_description: str, tools: List[Tool], sub_results: List[TaskResult], llm: LLM, caller_tracer: Tracer):
     tracer = caller_tracer.on(enhance_task_description.__name__, locals())
-    SYS_PROMPT = """You are a task reinterpreter.
+    SYS_PROMPT = f"""You are a task reinterpreter.
     
 Your job is to generate an Enhanced task description, based on the current Task description and enhanced with the knowledge of the Results of the finished tasks.
 
@@ -169,21 +188,21 @@ The task is answered in the following stages only by the Enhanced description yo
 
 The format looks like this:
 
-Tools: {"tool name": "tool description", ...more tools...}
+Tools: {TOOLS_FORMAT_LINE}
 Task: the description of the current Task description
-Results: [{"task": "description of a finished task", "result": "result of the finished task"}, ...]
+Results: {SUBTASK_RESULTS_FORMAT_LINE}
 Enhanced: your enhanced task description in plain text
 
 # GOOD Examples
 
-Tools: {"sqr_math": "A tool to square any real number.", "book_db": "Find all information about a book"}
+Tools: {format_tools(EXAMPLE_TOOLS)}
 Task: Determine when the author of Some Example Book was born.
-Results: [{"task": "Determine the author of Some Example Book", "result": "The author is James B. Clark"}]
+Results: [{{"task": "Determine the author of Some Example Book", "result": "The author is James B. Clark"}}]
 Enhanced: Determine when James B. Clark, the author of Some Example Book, was born.
 
-Tools: {"example_movie_lookup": "Looking up movies"}
+Tools: {{"example_movie_lookup": "Looking up movies"}}
 Task: Determine, where the actor, who played Hikaru Sulu, lives? 
-Results: [{"task": "Determine who played Hikaru Sulu in Star Trek", "result": "The example_movie_lookup tool failed. Could not determine the actor."}]
+Results: [{{"task": "Determine who played Hikaru Sulu in Star Trek", "result": "The example_movie_lookup tool failed. Could not determine the actor."}}]
 Enhanced: Because the example_movie_lookup tool failed, we don't know who played Hikaru Sulu in Star Trek. So it can't be determined where he lives.
 
 # Conversation
@@ -242,11 +261,7 @@ def make_tool_input(task_description: str, tool: Tool|None, llm: LLM, caller_tra
     if tool == None:
         return None
 
-    EXAMPLE_TOOL_SQR_MATH_DESCR = """A tool to square any real number.
-
-Input only a single number (as a valid JSON-formatted number). The tool will return the square of the number.
-"""
-    SYS_PROMPT = """You are an input generator.
+    SYS_PROMPT = f"""You are an input generator.
 
 Your job is to parse the Task description and generate a valid Input for the provided Tool.
 
@@ -259,19 +274,19 @@ Your job is to parse the Task description and generate a valid Input for the pro
 The format looks like this:
 
 Task: the description of the task
-Tool: {"name of provided tool": "tool description"}
-Input: the JSON-encoded input formatted as the tool description demands
+Tool: {TOOL_VERBOSE_FORMAT_LINE}
+Input: the JSON-encoded input formatted as the Tool description demands
 
 # GOOD Examples
 
 Task: Find the square of 123.
-Tool: {"sqr_math": """ + EXAMPLE_TOOL_SQR_MATH_DESCR + """}
+Tool: {format_tool_verbose(EXAMPLE_TOOLS[0])}
 Input: 123
 
 # BAD Examples
 
 Task: What is the square of one-hundred and three.
-Tool: {"sqr_math": """ + EXAMPLE_TOOL_SQR_MATH_DESCR + """}
+Tool: {format_tool_verbose(EXAMPLE_TOOLS[0])}
 Input: one-hundred
 
 # Conversation
@@ -279,7 +294,7 @@ Input: one-hundred
 """
     query_msg = f"""
 Task: {task_description}
-Tool: {json.dumps({tool.name: {'description': tool.doc, 'input format': tool.input_doc}})}
+Tool: {format_tool_verbose(tool)}
 Input: """
     return stage_call_llm(SYS_PROMPT, query_msg, llm)
 
