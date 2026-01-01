@@ -151,12 +151,62 @@ Answer: """
     return stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
 
 
+def enhance_task_description(task_description: str, tools: List[Tool], sub_results: List[TaskResult], llm: LLM, caller_tracer: Tracer):
+    tracer = caller_tracer.on(enhance_task_description.__name__, locals())
+    SYS_PROMPT = """You are a task reinterpreter.
+    
+Your job is to generate an Enhanced task description, based on the current Task description and enhanced with the knowledge of the Results of the finished tasks.
+
+The task is answered in the following stages only by the Enhanced description you generate. Keep all necessary information in.
+
+# Rules
+
+- NEVER add any fact that are not based on the information provided.
+- Do NOT write the 'Enhanced:' part.
+- If the Results are unnecessary verbose, summarize them and filter out relevant information.
+
+# Format
+
+The format looks like this:
+
+Tools: {"tool name": "tool description", ...more tools...}
+Task: the description of the current Task description
+Results: [{"task": "description of a finished task", "result": "result of the finished task"}, ...]
+Enhanced: your enhanced task description in plain text
+
+# GOOD Examples
+
+Tools: {"sqr_math": "A tool to square any real number.", "book_db": "Find all information about a book"}
+Task: Determine when the author of Some Example Book was born.
+Results: [{"task": "Determine the author of Some Example Book", "result": "The author is James B. Clark"}]
+Enhanced: Determine when James B. Clark, the author of Some Example Book, was born.
+
+Tools: {"example_movie_lookup": "Looking up movies"}
+Task: Determine, where the actor, who played Hikaru Sulu, lives? 
+Results: [{"task": "Determine who played Hikaru Sulu in Star Trek", "result": "The example_movie_lookup tool failed. Could not determine the actor."}]
+Enhanced: Because the example_movie_lookup tool failed, we don't know who played Hikaru Sulu in Star Trek. So it can't be determined where he lives.
+
+# Conversation
+"""
+    query_msg = f"""
+Tools: {format_tools(tools)}
+Task: {task_description}
+Results: {format_subtask_results(sub_results)}
+Enhanced: """
+    return stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
+
+
 
 def choose_tool(task_description: str, tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> Tool:
     tracer = caller_tracer.on(choose_tool.__name__, locals())
     SYS_PROMPT = """You are a tool choser.
 
 Your job is to select one of the Tools to be called next. The History shows the previous Tool calls including the input to the Tool and the output from it.
+
+# Rules
+
+If the Task can be answered without a tool, output *just* a line break!
+NEVER output any additional text. Only the Tool name or line break.
 
 # Format
 
@@ -202,7 +252,7 @@ Your job is to parse the Task description and generate a valid Input for the pro
 
 # Rules
 
-- ONLY output the Input in valid JSON. No extra text.
+- ONLY output the Input in valid JSON. No extra text. Do NOT add 'Input: '.
 
 # Format
 
@@ -266,14 +316,15 @@ Answer: """
 
 # main
 
-def run_subtask(task_description: str, tools: List[Tool], results: List[TaskResult], llm: LLM, caller_tracer = Tracer) -> str:
+def run_subtask(task_description: str, tools: List[Tool], subtask_results: List[TaskResult], llm: LLM, caller_tracer = Tracer) -> str:
     tracer = caller_tracer.on("run_subtask", locals())
 
-    chosen_tool = choose_tool(task_description, tools, llm, tracer)
-    tool_input = make_tool_input(task_description, chosen_tool, llm, tracer)
+    enhanced_description = enhance_task_description(task_description, tools, subtask_results, llm, tracer)
+    chosen_tool = choose_tool(enhanced_description, tools, llm, tracer)
+    tool_input = make_tool_input(enhanced_description, chosen_tool, llm, tracer)
     tool_result = run_tool(chosen_tool, tool_input, tracer)
     tool_calls = [ToolCall(chosen_tool.name, tool_input, tool_result)]
-    subanswer = answer_subtask(task_description, tool_calls, llm, tracer)
+    subanswer = answer_subtask(enhanced_description, tool_calls, llm, tracer)
     tracer.on("answer", {'answer': subanswer})
     return subanswer
 
