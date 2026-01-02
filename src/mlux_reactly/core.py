@@ -212,8 +212,9 @@ Tools: {format_tools(tools)}
 Task: {task_description}
 Results: {format_subtask_results(sub_results)}
 Enhanced: """
-    return stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
-
+    enhanced = stage_call_llm(SYS_PROMPT, query_msg, llm, decode_json=False)
+    tracer.on("result", {'result': enhanced})
+    return enhanced
 
 
 def choose_tool(task_description: str, tools: List[Tool], llm: LLM, caller_tracer: Tracer) -> Tool:
