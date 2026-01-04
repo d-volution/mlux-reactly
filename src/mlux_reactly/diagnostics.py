@@ -118,23 +118,22 @@ class NormalTracer(Tracer):
             details = f"tools: {json.dumps(as_dict)}"
         elif key == "answer":
             details = f"{args['answer']}"
-        elif key in ["result", "tool_result", "tool_failure"]:
-            details = event.arg("result")
+        elif key in ["result", "stage_result", "tool_result", "tool_failure"]:
+            details = str(event.arg("result"))[:200]
         elif key == "run_tool":
             tool: Tool = event.arg("tool", Tool("None", "None", {}, lambda *args, **kwargs: None))
             details = tool.name + " " + json.dumps(event.arg("input"))
+
+        if key.startswith('stage_run_'):
+            """--"""
+            if key in ["stage_run_"]:
+                details = f"\n\nprompt:\n----------\n{event.arg('sys_prompt', "<<- tracer could not get system prompt ->>")}{event.arg('conversation', "<<- tracer could not get conversation ->>")}\n----------"
 
         print(f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}", file=self.stream)
 
 
 
-class ZeroTracer(Tracer):
-    def on(self, key: str, args: Dict[str, Any]) -> "ZeroTracer":
-        return self
-    def reset(self):
-        pass
-    def add_arg(self, arg_name, arg):
-        return
+
     
 
 def tracer_initialize_on_query(agent_tracer: Tracer, user_question: str) -> Tracer:

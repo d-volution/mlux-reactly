@@ -3,9 +3,8 @@ from typing import Callable
 from typing import get_origin, get_args, Annotated
 import inspect
 from io import StringIO
-from .types import LLM, Tool, ChatQA, Tracer
+from .types import LLM, Tool, ChatQA, Tracer, ZeroTracer
 from .core import run_query
-from .diagnostics import NormalTracer, ZeroTracer, Diagnostics
 
 
 def describe(fn):

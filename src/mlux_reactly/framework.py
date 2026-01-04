@@ -28,18 +28,19 @@ def call_llm(context: List[CtxMessage], llm: LLM) -> str:
                 'content': msg.content
             } for msg in context]
         )
-    return response["message"]["content"]
+    return str(response["message"]["content"])
 
 
 
 
-def make_json_serializable(data):
+def make_json_serializable(data: Any):
     if type(data) == list:
         return [make_json_serializable(element) for element in data]
-    if is_dataclass(data):
+    if is_dataclass(data) and not isinstance(data, type):
         return asdict(data)
-    return data
-
+    if type(data) in [str, int, float, bool, dict]:
+        return data
+    return str(data)
 
 
 @dataclass
@@ -49,6 +50,7 @@ class FFFF:
     encoding: Encoding
     rules: List[str] # FFF specific rules
     preshape_fn: Callable[[Any], Any] | None
+    default: Any
 
 
 def serialize_data(data, encoding: Encoding) -> str:
@@ -70,15 +72,16 @@ def format_data(data, ff: FFFF, *, ctx: str = "") -> str:
     return format_data_explicit(data, ff.preshape_fn, ff.encoding, ctx=ctx)
 
 
-def make_ffff(template: Any, encoding = Encoding.JSON, rules = [], preshape_fn = None) -> FFFF:
-    return FFFF(serialize_data(template, encoding), encoding=encoding, rules=rules, preshape_fn=preshape_fn)
+def make_ffff(template: Any, encoding = Encoding.JSON, *, rules = [], preshape_fn = None, default: Any = None) -> FFFF:
+    return FFFF(serialize_data(template, encoding), encoding=encoding, rules=rules, preshape_fn=preshape_fn, default=default)
 
 def ffff_as_list(ff: FFFF, *, add_rules: List[str] = []) -> FFFF:
     return FFFF(
         format_template=f"[{ff.format_template}, ...]",
         encoding=Encoding.JSON,
         rules=ff.rules + add_rules,
-        preshape_fn=(lambda elements: [ff.preshape_fn(element) for element in elements]) if ff.preshape_fn is not None else None
+        preshape_fn=(lambda elements: [ff.preshape_fn(element) for element in elements]) if ff.preshape_fn is not None else None,
+        default=[]
     )
 
 def generate_conversation(data: Dict[str, Any], inputs: List[Tuple[str, FFFF]], output: Tuple[str, FFFF], with_output: bool = False, ctx: str = ""):
@@ -88,8 +91,8 @@ def generate_conversation(data: Dict[str, Any], inputs: List[Tuple[str, FFFF]], 
     for input in inputs:
         input_label = input[0]
         input_ff = input[1]
-        input_value = data.get(input_label) # TODO default
-        unhandled_input_labels.remove(input_label)
+        input_value = data.get(input_label, input_ff.default)
+        unhandled_input_labels.discard(input_label)
         conversation_section += f"{input_label}: {format_data(input_value, input_ff, ctx=ctx+f": generate_conversation input {input_label}")}\n"
 
     output_label = output[0]
@@ -101,7 +104,9 @@ def generate_conversation(data: Dict[str, Any], inputs: List[Tuple[str, FFFF]], 
         conversation_section += format_data(output_value, output_ff,  ctx=ctx+f": generate_conversation output {output_label}")
 
     if len(unhandled_input_labels) > 0:
-        raise ValueError(ctx+f"got input values with unknown labels").add_note(f"unknown labels: {unhandled_input_labels}")
+        e = ValueError(ctx+f"got input values with unknown labels")
+        e.add_note(f"unknown labels: {unhandled_input_labels}")
+        raise e
 
     return conversation_section
 
@@ -144,8 +149,7 @@ def generate_sys_prompt(
     for example in good_examples:
         good_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt") + "\n"
 
-    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, "# Conversation\n"] if sec != ""])
-
+    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, "# Conversation\n\n"] if sec != ""])
     return sys_prompt
 
 
@@ -160,9 +164,10 @@ class Stage:
     tries: int
     llm: LLM
 
-    def __call__(self, input_data: Dict[str, Any], tries: int|None = None, llm: LLM|None = None, tracer: Tracer = ZeroTracer()):
-
+    def __call__(self, input_data: Dict[str, Any], llm: LLM|None = None, tracer: Tracer = ZeroTracer(), *, tries: int|None = None):
         conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
+
+        local_tracer = tracer.on("stage_run_" + self.name, {'sys_prompt': self.sys_prompt, 'conversation': conversation_section})
 
         for try_nr in range(tries or self.tries):
             context = [
@@ -171,10 +176,16 @@ class Stage:
             ]
             llm_response = call_llm(context, llm or self.llm)
             
-            deserialized = llm_response if self.output[1].encoding == Encoding.rawtextline else json.loads(llm_response)
+            deserialized = llm_response.replace("\n", "") if self.output[1].encoding == Encoding.rawtextline else json.loads(llm_response)
+            local_tracer.on("stage_result", {'result': deserialized})
             return deserialized
 
         return None # if no try was successful
+
+
+def as_labeled_format(original: Tuple[str, FFFF|str]) -> Tuple[str, FFFF]:
+    assert(isinstance(original, tuple))
+    return original if isinstance(original[1], FFFF) else (original[0], make_ffff(original[1], encoding=Encoding.rawtextline)) 
 
 
 def make_stage(
@@ -182,19 +193,21 @@ def make_stage(
         stage_description: str, 
         *, 
         rules: List[str] = [],
-        inputs: List[Tuple[str, FFFF]],
-        output: Tuple[str, FFFF],
+        inputs: List[Tuple[str, FFFF|str]],
+        output: Tuple[str, FFFF|str],
         llm: LLM = LLM(""),
         tries: int = 1,
-        good_examples: List[Tuple]) -> Stage:
+        good_examples: List[Dict[str, Any]]) -> Stage:
+    inputs = inputs_ = [as_labeled_format(input) for input in inputs]
+    output = output_ = as_labeled_format(output)
     args = locals()
 
     sys_prompt = generate_sys_prompt(**args)
     stage = Stage(
         stage_name, 
         sys_prompt, 
-        inputs=inputs,
-        output=output, 
+        inputs=inputs_,
+        output=output_, 
         tries=tries, 
         llm=llm)
     return stage
