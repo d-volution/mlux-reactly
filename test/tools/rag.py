@@ -11,7 +11,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 def make_rag_tool(documents_path: str):
     documents: List[Document] = SimpleDirectoryReader(
         documents_path, 
-        #file_metadata=lambda x: {"filename": x}
+        file_metadata=lambda x: {"filename": x}
     ).load_data()
     index = VectorStoreIndex.from_documents(documents, embed_model=OllamaEmbedding(
         model_name="nomic-embed-text"
@@ -30,6 +30,6 @@ def make_rag_tool(documents_path: str):
             'content': result.get_content(),
         } for result in results]
 
-        return json.dumps(results_as_dicts)
+        return results_as_dicts
     
     return rag

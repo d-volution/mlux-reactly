@@ -1,3 +1,4 @@
+import traceback
 import sys
 import io
 from mlux_reactly import ReactlyAgent, NormalTracer, LLM
@@ -13,10 +14,10 @@ class StdoutStringIO(io.StringIO):
         return len(s)
 
 stream = StdoutStringIO()
-tracer = NormalTracer(stream=stream, record_file=open("reactly_query_record.jsonl", "+a"))
+tracer = NormalTracer(name="chat", stream=stream, record_file=open("reactly_query_record.jsonl", "+a"))
 
 llm = LLM("qwen2.5:7b-instruct-q8_0")
-agent = ReactlyAgent(tools=[calculator, text_count, make_rag_tool("./test-files")], tracer=tracer, llm=llm)
+agent = ReactlyAgent(tools=[calculator, text_count, make_rag_tool("./test-files-rag")], tracer=tracer, llm=llm)
 
 
 # chat loop:
@@ -37,5 +38,10 @@ while True:
 
         continue
 
-    response = agent.query(user_input)
-    print(response + "\n")
+    try:
+        response = agent.query(user_input)
+        print(response + "\n")
+    except Exception as e:
+        print(f"\033[31m[query crashed]\033[0m")
+        traceback.print_exception(e)
+        print()

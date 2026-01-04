@@ -42,4 +42,4 @@ Do never write `np.sin`, `np.sqrt`, ... in the input!"""]
         raise f"Tool input '{expression}' is invalid. {e}"
     
     result = ne.evaluate(expression, local_dict)
-    return (result)
+    return result
