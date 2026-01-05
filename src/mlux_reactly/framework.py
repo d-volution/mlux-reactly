@@ -36,10 +36,14 @@ def call_llm(context: List[CtxMessage], llm: LLM) -> str:
 def make_json_serializable(data: Any):
     if type(data) == list:
         return [make_json_serializable(element) for element in data]
+    if isinstance(data, dict):
+        return {k: make_json_serializable(v) for k, v in data.items()}
     if is_dataclass(data) and not isinstance(data, type):
-        return asdict(data)
-    if type(data) in [str, int, float, bool, dict]:
+        return make_json_serializable(asdict(data))
+    if type(data) in [str, int, float, bool]:
         return data
+    if hasattr(data, "tolist"):
+        return make_json_serializable(data.tolist())
     return str(data)
 
 
@@ -63,10 +67,10 @@ def serialize_data(data, encoding: Encoding) -> str:
 def format_data_explicit(data, preshape_fn: Callable[[Any], Any] | None, encoding: Encoding, *, ctx: str = "") -> str:
     try:
         data_preshaped = data if preshape_fn is None else preshape_fn(data)
+        return serialize_data(data_preshaped, encoding)
     except BaseException as e:
         e.add_note(f"in {ctx}: format_data_explicit")
         raise e
-    return serialize_data(data_preshaped, encoding)
 
 def format_data(data, ff: FFFF, *, ctx: str = "") -> str:
     return format_data_explicit(data, ff.preshape_fn, ff.encoding, ctx=ctx)
@@ -165,9 +169,10 @@ class Stage:
     llm: LLM
 
     def __call__(self, input_data: Dict[str, Any], llm: LLM|None = None, tracer: Tracer = ZeroTracer(), *, tries: int|None = None):
-        conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
+        local_tracer = tracer.on("stage_run_" + self.name, {'sys_prompt': self.sys_prompt})
 
-        local_tracer = tracer.on("stage_run_" + self.name, {'sys_prompt': self.sys_prompt, 'conversation': conversation_section})
+        conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
+        local_tracer.add_arg('conversation', conversation_section)
 
         for try_nr in range(tries or self.tries):
             context = [
