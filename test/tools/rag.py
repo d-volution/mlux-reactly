@@ -11,7 +11,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 def make_rag_for_folder(documents_path: str):
     documents: List[Document] = SimpleDirectoryReader(
         documents_path, 
-        file_metadata=lambda x: {"filename": x}
+        file_metadata=lambda x: {"document_name": x.split('/').pop()}
     ).load_data()
     return make_rag_for_documents(documents)
 
@@ -33,7 +33,7 @@ def make_rag_for_retriever(retriever: BaseRetriever):
         results = retriever.retrieve(query)
 
         results_as_dicts = [{
-            #'name': result.__doc__.lower(),
+            'document_name': result.metadata.get("document_name"),
             'score': result.get_score(),
             'content': result.get_content(),
         } for result in results]
