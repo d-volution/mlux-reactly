@@ -36,10 +36,10 @@ Do never write `np.sin`, `np.sqrt`, ... in the input!"""]
 
     undef = [s for s in symbol_re.findall(expression) if s not in allowed_symbols]
     if len(undef) > 0:
-        raise f"The following used symbols are not defined: {undef}"
+        raise ValueError(f"The following used symbols are not defined: {undef}")
 
     if e is not None:
-        raise f"Tool input '{expression}' is invalid. {e}"
+        raise ValueError(f"Tool input '{expression}' is invalid. {e}")
     
     result = ne.evaluate(expression, local_dict)
     return result
