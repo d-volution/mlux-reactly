@@ -4,7 +4,7 @@ import re
 import numexpr as ne
 from mlux_reactly import ReactlyAgent, NormalTracer
 from mlux_reactly.types import LLM
-from tools import calculator, text_count, make_rag_tool
+from tools import calculator, text_count, make_rag_for_folder
 
 random.seed(12042)
 record_file=open("reactly_eval_query_record.jsonl", "+a")

@@ -2,7 +2,7 @@ import traceback
 import sys
 import io
 from mlux_reactly import ReactlyAgent, NormalTracer, LLM
-from tools import calculator, text_count, make_rag_tool
+from tools import calculator, text_count, make_rag_for_folder
 
 
 class StdoutStringIO(io.StringIO):
@@ -17,7 +17,7 @@ stream = StdoutStringIO()
 tracer = NormalTracer(name="chat", stream=stream, record_file=open("reactly_query_record.jsonl", "+a"))
 
 llm = LLM("qwen2.5:7b-instruct-q8_0")
-agent = ReactlyAgent(tools=[calculator, text_count, make_rag_tool("./test-files-rag")], tracer=tracer, llm=llm)
+agent = ReactlyAgent(tools=[calculator, text_count, make_rag_for_folder("./test-files-rag")], tracer=tracer, llm=llm)
 
 
 # chat loop:
