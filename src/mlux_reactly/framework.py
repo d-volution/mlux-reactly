@@ -129,6 +129,7 @@ def generate_sys_prompt(
         inputs: List[Tuple[str, FFFF]],
         output: Tuple[str, FFFF],
         good_examples: List[Dict[str, Any]],
+        bad_examples: List[Dict[str, Any]],
         **kwargs) -> str:
     
     prompt_head = f"{stage_description}\n"
@@ -151,9 +152,13 @@ def generate_sys_prompt(
 
     good_examples_section = "# GOOD Examples\n\n" if len(good_examples) > 0 else ""
     for example in good_examples:
-        good_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt") + "\n"
+        good_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt good example") + "\n"
 
-    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, "# Conversation\n\n"] if sec != ""])
+    bad_examples_section = "# BAD Examples\n\n" if len(bad_examples) > 0 else ""
+    for example in bad_examples:
+        bad_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt bad example") + "\n"
+
+    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, bad_examples_section, "# Conversation\n\n"] if sec != ""])
     return sys_prompt
 
 
@@ -202,7 +207,8 @@ def make_stage(
         output: Tuple[str, FFFF|str],
         llm: LLM = LLM(""),
         tries: int = 1,
-        good_examples: List[Dict[str, Any]]) -> Stage:
+        good_examples: List[Dict[str, Any]] = [],
+        bad_examples: List[Dict[str, Any]] = []) -> Stage:
     inputs = inputs_ = [as_labeled_format(input) for input in inputs]
     output = output_ = as_labeled_format(output)
     args = locals()

@@ -111,6 +111,10 @@ class NormalTracer(Tracer):
         details = ""
         if key == "run_query":
             self.diagnostics.set_timepoint("run_query")
+            try:
+                details = f"user_question: {json.dumps(event.arg("user_question"))}, tools: {json.dumps([tool.name for tool in event.arg("tools")])}"
+            except:
+                pass
         elif key == "run_subtask":
             details = f"{args['task_description']}"
         elif key == "choose_tool":
@@ -129,18 +133,15 @@ class NormalTracer(Tracer):
             if key in ["stage_run_"]:
                 details = f"\n\nprompt:\n----------\n{event.arg('sys_prompt', "<<- tracer could not get system prompt ->>")}{event.arg('conversation', "<<- tracer could not get conversation ->>")}\n----------"
 
-        print(f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}", file=self.stream)
+        if self.stream is not None:
+            print(f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}", file=self.stream)
 
 
 
 
     
 
-def tracer_initialize_on_query(agent_tracer: Tracer, user_question: str) -> Tracer:
-    tracer = agent_tracer.on("run_query", {
-        'user_question': user_question
-    })
-    return tracer
+
 
 def tracer_finish_with_response(tracer: Tracer, agent_response: str):
     tracer.add_arg("agent_response", agent_response)

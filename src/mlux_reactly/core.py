@@ -3,7 +3,7 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 from .types import LLM, Tool, TaskResult, ChatQA, Tracer
 from .framework import make_stage, make_ffff, ffff_as_list, Encoding
-from .diagnostics import Diagnostics, tracer_initialize_on_query, tracer_finish_with_response
+from .diagnostics import Diagnostics, tracer_finish_with_response
 
 # helper
 
@@ -97,7 +97,8 @@ split_user_question = make_stage(
         "Tasks must be strictly ordered.",
         "Do not merge multiple actions into one task.",
         "If required information is missing, create a task to retrieve it.",
-        "Prefer fewer tasks over more."
+        "Prefer fewer tasks over more.",
+        "Do NOT say which Tools to use in the Tasks."
     ],
     inputs=[
         ("Tools", tools_concise_ffff),
@@ -110,8 +111,16 @@ split_user_question = make_stage(
             'Question': "What is the sqare of the year the coworker Mike was born?", 
             'Tasks': ["Find out the date of birth for coworker Mike.", "Square the year number of the date of birth."]
         }
+    ],
+    bad_examples=[
+        {
+            'Tools': EXAMPLE_TOOLS, 
+            'Question': "What kind of wood is heavy?", 
+            'Tasks': ["Find a heavy kind of wood using the wood tool."]
+        }
     ])
 
+print("sys prompt split user q\n", split_user_question.sys_prompt)
 
 enhance_task_description = make_stage(
     "enhance_task_description",
@@ -184,13 +193,12 @@ generate_tool_input = make_stage(
     output=('Input', make_ffff("your generated JSON-encoded input", encoding=Encoding.JSON)),
     good_examples=[
         {'Task': "Find the square of 123.", 'Tool': EXAMPLE_TOOLS[0], 'Input': {'number': 123}}
+    ],
+    bad_examples=[
+        {'Task': "What is the square of one-hundred and three.", 'Tool': EXAMPLE_TOOLS[0], 'Input': {'number': "103"}}
     ]
 )
 
-"""BAD EXAMPLE:
-Task: What is the square of one-hundred and three.
-Tool: {format_tool_verbose(EXAMPLE_TOOLS[0])}
-Input: one-hundred"""
 
 
 answer_task = make_stage(
@@ -254,7 +262,7 @@ def run_subtask(task_description: str, tools: List[Tool], subtask_results: List[
 
 
 def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, agent_tracer: Tracer) -> str:
-    tracer = tracer_initialize_on_query(agent_tracer, user_question)
+    tracer = agent_tracer.on("run_query", locals())
     subtask_results: List[TaskResult] = []
     
     subtasks = split_user_question({'Question': user_question, 'Tools': tools}, llm=llm, tracer=tracer)
