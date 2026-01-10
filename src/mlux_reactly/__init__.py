@@ -1,6 +1,5 @@
 
 from .agent import ReactlyAgent
-from .diagnostics import NormalTracer
-from .types import Tracer, Tool, LLM
+from .types import Tracer, ZeroTracer, Tool, LLM
 
-__all__ = ["ReactlyAgent", "Tracer", "Tool", "NormalTracer", "LLM"]
+__all__ = ["ReactlyAgent", "Tracer", "ZeroTracer", "Tool", "LLM"]

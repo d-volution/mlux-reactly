@@ -1,12 +1,9 @@
-from typing import Dict, List, Any
 from dataclasses import dataclass, asdict
+from typing import Any, Dict, List
 from datetime import datetime
 from io import StringIO, TextIOWrapper
 import json
-from .types import Tracer, Tool
-
-
-
+from mlux_reactly import Tracer, Tool
 
 
 class Diagnostics:
@@ -41,6 +38,7 @@ class Diagnostics:
         pass
 
 
+
 @dataclass
 class Event:
     key: str
@@ -55,12 +53,17 @@ class Event:
         return self.args.get(name, alternative)
 
 
-class NormalTracer(Tracer):
+
+
+
+class TestTracer(Tracer):
     event: Event
     level: int
     diagnostics: Diagnostics
     stream: StringIO|None
     record_file: TextIOWrapper|None
+    holdback_stream: StringIO
+    holdback_enabled: bool
 
     def __init__(self, *, 
                  name: str|None = None,
@@ -68,7 +71,8 @@ class NormalTracer(Tracer):
                  level: int = 0, 
                  diagnostics = Diagnostics(),
                  stream: StringIO|None = None,
-                 record_file: TextIOWrapper|None = None):
+                 record_file: TextIOWrapper|None = None,
+                 holdback: bool = False):
         self.event = event
         if name is not None:
             self.event.key = name
@@ -76,8 +80,10 @@ class NormalTracer(Tracer):
         self.diagnostics = diagnostics
         self.stream = stream
         self.record_file = record_file
+        self.holdback_stream = StringIO()
+        self.holdback_enabled = holdback
 
-    def on(self, key: str, args: Dict[str, Any]) -> "NormalTracer":
+    def on(self, key: str, args: Dict[str, Any]) -> "TestTracer":
         time = datetime.now()
         self.diagnostics.increment_counter(key)
         if key == "run_query":
@@ -85,7 +91,9 @@ class NormalTracer(Tracer):
         event = Event(key, args, [], time)
         self.event.sub.append(event)
         self._log(event)
-        return NormalTracer(event=event, level=self.level+1, diagnostics=self.diagnostics, stream=self.stream, record_file=self.record_file)
+        newtracer = TestTracer(event=event, level=self.level+1, diagnostics=self.diagnostics, stream=self.stream, record_file=self.record_file, holdback=self.holdback_enabled)
+        newtracer.holdback_stream = self.holdback_stream
+        return newtracer
     
     def add_arg(self, arg_name: str, arg: Any):
         self.event.args[arg_name] = arg
@@ -108,6 +116,9 @@ class NormalTracer(Tracer):
 
         NONE_TOOL = Tool("None", "None", {}, lambda *a, **k: None)
 
+        release_holdback = False
+        important = False
+
         details = ""
         if key == "run_query":
             self.diagnostics.set_timepoint("run_query")
@@ -127,23 +138,25 @@ class NormalTracer(Tracer):
         elif key == "run_tool":
             tool: Tool = event.arg("tool", Tool("None", "None", {}, lambda *args, **kwargs: None))
             details = tool.name + " " + json.dumps(event.arg("input"))
+        elif key == 'stage_crash':
+            details = event.arg('message')
+            release_holdback = True
 
         if key.startswith('stage_run_'):
             """--"""
             if key in ["stage_run_"]:
                 details = f"\n\nprompt:\n----------\n{event.arg('sys_prompt', "<<- tracer could not get system prompt ->>")}{event.arg('conversation', "<<- tracer could not get conversation ->>")}\n----------"
 
-        if self.stream is not None:
-            print(f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}", file=self.stream)
+        print_text = f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}"
 
+        if self.stream is not None and (not self.holdback_enabled or important):
+            print(print_text, file=self.stream)
+        if self.stream is not None and self.holdback_enabled:
+            print(print_text, file=self.holdback_stream)
+
+        if release_holdback:
+            print("---------- holdback: ----------\n" + self.holdback_stream.getvalue() + "\n------------------------------", file=self.stream)
 
 
 
     
-
-
-
-def tracer_finish_with_response(tracer: Tracer, agent_response: str):
-    tracer.add_arg("agent_response", agent_response)
-    tracer.reset()
-

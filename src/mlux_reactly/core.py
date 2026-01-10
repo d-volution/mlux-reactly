@@ -3,7 +3,6 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 from .types import LLM, Tool, TaskResult, ChatQA, Tracer
 from .framework import make_stage, make_ffff, ffff_as_list, Encoding
-from .diagnostics import Diagnostics, tracer_finish_with_response
 
 # helper
 
@@ -120,8 +119,6 @@ split_user_question = make_stage(
         }
     ])
 
-print("sys prompt split user q\n", split_user_question.sys_prompt)
-
 enhance_task_description = make_stage(
     "enhance_task_description",
     "You are a task reinterpreter.\n" +
@@ -187,12 +184,12 @@ choose_tool_for_task = make_stage(
 
 generate_tool_input = make_stage(
     "generate_tool_input",
-    "You are an input generator.\n\nYour job is to parse the Task description and generate a valid Input for the provided Tool.",
-    rules=["Format the Input according to the input_format of the Tool."],
-    inputs=[('Task', task_description_ffff), ('Tool', tool_verbose_ffff)],
-    output=('Input', make_ffff("your generated JSON-encoded input", encoding=Encoding.JSON)),
+    "You are an input generator.\n\nYour job is to parse the Task description and generate a valid Input for the provided Tool. The History are the previous tool calls and responses.",
+    rules=["Format the Input according to the input_format of the Tool.", "Do NOT generate the same Input for the same Tool as already done previously."],
+    inputs=[('Task', task_description_ffff), ('Tool', tool_verbose_ffff), ("History", tool_run_history)],
+    output=('Input', make_ffff({'first parameter name': "some input value (of JSON-type specified by input format)", "another parameter name": "another input value"}, encoding=Encoding.JSON)),
     good_examples=[
-        {'Task': "Find the square of 123.", 'Tool': EXAMPLE_TOOLS[0], 'Input': {'number': 123}}
+        {'Task': "Find the square of 123.", 'Tool': EXAMPLE_TOOLS[0], 'History': [], 'Input': {'number': 123}}
     ],
     bad_examples=[
         {'Task': "What is the square of one-hundred and three.", 'Tool': EXAMPLE_TOOLS[0], 'Input': {'number': "103"}}
@@ -250,7 +247,7 @@ def run_subtask(task_description: str, tools: List[Tool], subtask_results: List[
         chosen_tool = next((tool for tool in tools if tool.name == chosen_tool_name), None)
         if chosen_tool is None:
             break
-        tool_input = generate_tool_input({'Task': enhanced_description, 'Tool': chosen_tool}, llm, tracer)
+        tool_input = generate_tool_input({'Task': enhanced_description, 'Tool': chosen_tool, 'History': tool_runs}, llm, tracer)
         tool_result = run_tool(chosen_tool, tool_input, tracer)
         tool_runs.append(ToolRunRecord(chosen_tool.name, tool_input, tool_result))
         can_answer = can_answer_task({'Task': enhanced_description, 'History': tool_runs}, llm, tracer)
@@ -273,5 +270,6 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
 
     answer = str(answer_user_question({'Question': user_question, 'History': history, 'Results': subtask_results}, llm, tracer))
 
-    tracer_finish_with_response(tracer, answer)
+    tracer.add_arg("agent_response", answer)
+    tracer.reset()
     return answer
