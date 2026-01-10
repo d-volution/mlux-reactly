@@ -2,7 +2,7 @@ from typing import List, Protocol, Type, Dict
 import sys
 import asyncio
 import inspect
-from test.hotpot_based_evaluation import eval_results, Result
+from hotpot_based_evaluation import eval_results, Result
 from hotpot_parser import HotpotDatapoint, HotpotDocument, parse_hotspot_file
 from mlux_reactly import ReactlyAgent, LLM, Tracer
 from tools import calculator, text_count, make_rag_for_folder, make_rag_for_documents, Document
