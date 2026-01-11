@@ -37,10 +37,10 @@ class LlamaReActAgentWrapper:
             self, 
             tools: List[Tool | Callable], *, 
             tracer: Tracer = ZeroTracer(),
-            default_llm: LLM = default_llm):
+            llm: LLM = default_llm):
         self.agent = ReActAgent(
             tools=tools,
-            llm=default_llm,
+            llm=llm,
             #system_prompt="You are a helpful assistant that can multiply two numbers.",
         )
 
