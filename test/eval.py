@@ -2,6 +2,10 @@ from typing import Dict, List, Any, Callable
 from dataclasses import dataclass
 import argparse
 import asyncio
+from datetime import datetime
+from pathlib import Path
+import hashlib
+
 from test_types import Agent, AgentContructor, TestFunc, as_list
 from mlux_reactly import ReactlyAgent, LLM, Tracer
 from llama_index_agent import LlamaFunctionAgentWrapper, LlamaReActAgentWrapper
@@ -90,13 +94,47 @@ print()
 
 # run evaluations
 
+csv_entries_run = ['version', 'formathash', 'eval_prog', 'eval_time_start', 
+                   'run_index', 'test', 'test_param', 'agent', 'llm']
+csv_entries_evaluation = ['nr_total', 'nr_finsihed', 'nr_failed', 
+               'duration_total', 'duration_avg', 'duration_min', 'duration_max',
+               'em', 'f1', 'prec', 'recall']
+csv_entries = csv_entries_run + csv_entries_evaluation
+h_blake2b_csv_entries = hashlib.blake2b(digest_size=8)
+h_blake2b_csv_entries.update('\0'.join(csv_entries).encode())
+csv_entries_hash = int.from_bytes(h_blake2b_csv_entries.digest(), "little")
 
-
-
+def evaluation_to_csv(run: EvalRun, run_index: int, evaluation: Dict[str, float], *, eval_time_start: datetime) -> str:
+    values = {
+        'version': 1,
+        'formathash': csv_entries_hash,
+        'eval_prog': "eval.py",
+        'eval_time_start': eval_time_start.timestamp(),
+        'run_index': run_index,
+        'test': run.test,
+        'test_param': run.test_param,
+        'agent': run.agent_name,
+        'llm': run.llm
+    }
+    for entry_name in csv_entries_evaluation:
+        values[entry_name] = evaluation.get(entry_name)
+    
+    entries: List[str] = []
+    for entry_name in csv_entries:
+        value = values.get(entry_name)
+        value_str: str = ""
+        if type(value) in [int, float]:
+            value_str = str(value)
+        elif value is not None:
+            value_str = str(f'"{value}"')
+        entries.append(value_str)
+    return ";".join(entries)
 
 
 
 async def main() -> None:
+    eval_time_start = datetime.now()
+    results = []
     for i, run in enumerate(runs):
         print(f"running {i}: {run}")
 
@@ -105,8 +143,23 @@ async def main() -> None:
         llm = available_llms[run.llm]
 
         evaluation = await test_fn(run.test_param, agent, llm)
+        results.append({
+            'i': i,
+            'run': run,
+            'evaluation': evaluation,
+        })
 
-        print('eval:', run, evaluation)
+    results_file_path = Path('evaluation_results.csv')
+    results_file_exists = results_file_path.exists()
+
+    csv_lines = [] if results_file_exists else [";".join(csv_entries)]
+    for result in results:
+        csv_lines.append(evaluation_to_csv(result['run'], result['i'], result['evaluation'], eval_time_start=eval_time_start))
+
+    with open(results_file_path, 'a') as csv_file:
+        csv_file.write('\n'.join(csv_lines) + '\n')
+        
+        
 
     print("Done")
 
