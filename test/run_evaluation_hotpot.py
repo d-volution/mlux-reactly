@@ -65,8 +65,8 @@ async def hotpot_test_fn(test_param: str, agent_constr: AgentContructor, llm: LL
     print(f"test p: '{test_param}'")
     param_splits = test_param.split(':')
     set_name = at_or(param_splits, 0, "train")
-    start_pos = at_or(param_splits, 1, 0)
-    size = at_or(param_splits, 2, 1)
+    start_pos = int(at_or(param_splits, 1, 0))
+    size = int(at_or(param_splits, 2, 1))
     if set_name not in available_example_files.keys():
         raise AssertionError(f"hotpot test: param set name '{set_name}' not available")
     file_name = available_example_files[set_name]
