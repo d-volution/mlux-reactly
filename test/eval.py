@@ -44,7 +44,7 @@ args = argp.parse_args()
 @dataclass
 class EvalRun:
     test: str
-    test_param: str
+    test_param: str|None
     agent_name: str
     llm: str
 
@@ -80,9 +80,10 @@ runs: List[EvalRun] = []
 for test in as_list(args.tests):
     for agent in as_list(args.agents):
         for llm in as_list(args.llms):
+            test_param = "/".join(test.split('/')[1:])
             runs.append(EvalRun(
                 test=test.split('/')[0],
-                test_param="/".join(test.split('/')[1:]),
+                test_param=test_param if test_param else None,
                 agent_name=agent,
                 llm=llm
             ))
@@ -96,7 +97,7 @@ print()
 
 csv_entries_run = ['version', 'formathash', 'eval_prog', 'eval_time_start', 
                    'run_index', 'test', 'test_param', 'agent', 'llm']
-csv_entries_evaluation = ['nr_total', 'nr_finsihed', 'nr_failed', 
+csv_entries_evaluation = ['nr_total', 'nr_finished', 'nr_failed', 
                'duration_total', 'duration_avg', 'duration_min', 'duration_max',
                'em', 'f1', 'prec', 'recall']
 csv_entries = csv_entries_run + csv_entries_evaluation
