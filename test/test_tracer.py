@@ -1,41 +1,10 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, is_dataclass
 from typing import Any, Dict, List
 from datetime import datetime
 from io import StringIO, TextIOWrapper
 import json
 from mlux_reactly import Tracer, Tool
 
-
-class Diagnostics:
-    counters: dict[str, int]
-    timepoints: dict[str, float]
-
-    def __init__(self):
-        self.counters = {}
-        self.timepoints = {}
-
-    def as_dict(self):
-        return {
-            'counters': self.counters,
-            'timepoints': self.timepoints
-        }
-    
-    def get_timepoint(self, key) -> datetime|None:
-        if not key in self.timepoints:
-            return None
-        else:
-            return datetime.fromtimestamp(self.timepoints[key])
-
-    def set_timepoint(self, key: str, timepoint: datetime = datetime.now()):
-        self.timepoints[key] = timepoint.timestamp()
-    
-    def increment_counter(self, key: str):
-        if key not in self.counters:
-            self.counters[key] = 0
-        self.counters[key] += 1
-
-    def on_event(event_key: str):
-        pass
 
 
 
@@ -45,118 +14,121 @@ class Event:
     args: Dict[str, Any]
     sub: List["Event"]
     time: datetime
+    endtime: datetime|None = None
 
     def as_dict(self) -> Dict:
         return asdict(self)
 
-    def arg(self, name: str, alternative: Any = None) -> Any:
-        return self.args.get(name, alternative)
+
+@dataclass
+class TraceConfig:
+    session: str
+    record_file: TextIOWrapper|None = None
+
+known_init_keys = ['stage', 'task', 'llmcall', 'toolrun']
+
+
+########################
+
+def make_json_serializable(data: Any):
+    if type(data) == list:
+        return [make_json_serializable(element) for element in data]
+    if isinstance(data, dict):
+        return {k: make_json_serializable(v) for k, v in data.items()}
+    if is_dataclass(data) and not isinstance(data, type):
+        return make_json_serializable(asdict(data))
+    if type(data) in [str, int, float, bool]:
+        return data
+    if hasattr(data, "tolist"):
+        return make_json_serializable(data.tolist())
+    return str(data)
+
+def format_json_line(data: Any) :
+    if data is None:
+        return ""
+    return json.dumps(make_json_serializable(data))
+
+@dataclass
+class FormatConfig:
+    colored: bool = True
+
+
+def format_event_compact(event: Event, *, level: int = 0, format_config: FormatConfig = FormatConfig()) -> str:
+    lines = []
+    key = event.key
+    nextlevel = level+1
+
+    RESET = '\033[0m'
+    NCOLOR = '\033[33m' if format_config.colored else ''
+    ERRCOLOR = '\033[31m' if format_config.colored else ''
+    arg_nr = event.args.get('nr', -100)
+
+    headline = f"{"  "*level}* {key}"
+    if key=='stage':
+        headline += f" {NCOLOR}'{event.args.get('name', '')}'{RESET} => {format_json_line(event.args.get('result'))}"
+    elif key == 'toolrun':
+        tool: Tool = event.args.get('tool') or Tool()
+        headline += f" {NCOLOR}'{tool.name}'{RESET} => {format_json_line(event.args.get('result'))}"
+    elif key == 'try' and arg_nr == 0:
+        headline = ""
+    elif key == 'try' and arg_nr != 0:
+        headline = f"{ERRCOLOR}{"  "*level}* retry: {arg_nr}{RESET}"
+    elif key == 'failed':
+        msg = event.args.get('reason_code', str(event.args.get('exception', '')))
+        headline = f"{ERRCOLOR}{headline}: {msg}{RESET}"
+    lines.append(headline)
+    for ev in event.sub:
+        if ev.key in ['complete', 'llmcall']:
+            continue
+        if ev.key == 'try':
+            nextlevel=level
+        lines.append(format_event_compact(ev, level=nextlevel))
+    return "\n".join([line for line in lines if line != ""])
+    
 
 
 
 
+##########################
 
 class TestTracer(Tracer):
+    config: TraceConfig
     event: Event
-    level: int
-    diagnostics: Diagnostics
-    stream: StringIO|None
-    record_file: TextIOWrapper|None
-    holdback_stream: StringIO
-    holdback_enabled: bool
 
     def __init__(self, *, 
-                 name: str|None = None,
-                 event: Event = Event("", {}, [], datetime.now()), 
-                 level: int = 0, 
-                 diagnostics = Diagnostics(),
-                 stream: StringIO|None = None,
-                 record_file: TextIOWrapper|None = None,
-                 holdback: bool = False):
-        self.event = event
-        if name is not None:
-            self.event.key = name
-        self.level = level
-        self.diagnostics = diagnostics
-        self.stream = stream
-        self.record_file = record_file
-        self.holdback_stream = StringIO()
-        self.holdback_enabled = holdback
+                 config: TraceConfig|None = None, 
+                 event: Event|None = None,
+                 session: str|None = None,
+                 record_file: TextIOWrapper|None = None):
+        self.event = event or Event("root", {}, sub=[], time=datetime.now())
+        self.config = config or TraceConfig(session=session or f"default", record_file=record_file)
 
     def on(self, key: str, args: Dict[str, Any]) -> "TestTracer":
         time = datetime.now()
-        self.diagnostics.increment_counter(key)
-        if key == "run_query":
-            args['session_name'] = self.event.key
         event = Event(key, args, [], time)
         self.event.sub.append(event)
-        self._log(event)
-        newtracer = TestTracer(event=event, level=self.level+1, diagnostics=self.diagnostics, stream=self.stream, record_file=self.record_file, holdback=self.holdback_enabled)
-        newtracer.holdback_stream = self.holdback_stream
-        return newtracer
+
+        if key == 'complete':
+            self.add_arg('result', args.get('result'))
+            if self.event.key == 'query':
+                self._record_to_file()
+
+        return TestTracer(config=self.config, event=event)
     
     def add_arg(self, arg_name: str, arg: Any):
         self.event.args[arg_name] = arg
 
-    def reset(self):
-        self.diagnostics.set_timepoint("finished")
-        self_as_dict = {
-            'session': str(self.event.time.timestamp()) + self.event.arg('session_name', "session"),
-            'query': self.event.arg('user_question', ""),
-            'response': self.event.arg("agent_response", ""),
-            'diagnostics': self.diagnostics.as_dict()
-        }
+    def format_compact(self) -> str:
+        return format_event_compact(self.event)
 
-        if self.record_file != None:
-            self.record_file.write(json.dumps(self_as_dict) + "\n")
-
-    def _log(self, event: Event):
-        key = event.key
-        args = event.args
-
-        NONE_TOOL = Tool("None", "None", {}, lambda *a, **k: None)
-
-        release_holdback = False
-        important = False
-
-        details = ""
-        if key == "run_query":
-            self.diagnostics.set_timepoint("run_query")
-            try:
-                details = f"user_question: {json.dumps(event.arg("user_question"))}, tools: {json.dumps([tool.name for tool in event.arg("tools")])}"
-            except:
-                pass
-        elif key == "run_subtask":
-            details = f"{args['task_description']}"
-        elif key == "choose_tool":
-            as_dict = {tool.name: tool.doc for tool in (tool or NONE_TOOL for tool in event.arg("tools"))}
-            details = f"tools: {json.dumps(as_dict)}"
-        elif key == "answer":
-            details = f"{args['answer']}"
-        elif key in ["result", "stage_result", "tool_result", "tool_failure"]:
-            details = str(event.arg("result"))[:200]
-        elif key == "run_tool":
-            tool: Tool = event.arg("tool", Tool("None", "None", {}, lambda *args, **kwargs: None))
-            details = tool.name + " " + json.dumps(event.arg("input"))
-        elif key == 'stage_crash':
-            details = event.arg('message')
-            release_holdback = True
-
-        if key.startswith('stage_run_'):
-            """--"""
-            if key in ["stage_run_"]:
-                details = f"\n\nprompt:\n----------\n{event.arg('sys_prompt', "<<- tracer could not get system prompt ->>")}{event.arg('conversation', "<<- tracer could not get conversation ->>")}\n----------"
-
-        print_text = f"{"  "*self.level}* {key}{": " if details != "" else ""}{details}"
-
-        if self.stream is not None and (not self.holdback_enabled or important):
-            print(print_text, file=self.stream)
-        if self.stream is not None and self.holdback_enabled:
-            print(print_text, file=self.holdback_stream)
-
-        if release_holdback:
-            print("---------- holdback: ----------\n" + self.holdback_stream.getvalue() + "\n------------------------------", file=self.stream)
-
-
-
-    
+    def _record_to_file(self) -> None:
+        if self.config.record_file is not None:
+            self_as_dict = {
+                'session': str(self.event.time.timestamp()) + self.config.session,
+                'query': self.event.args.get('user_question', ""),
+                'response': self.event.args.get("result", ""),
+                'diagnostics': {}
+            }
+            self.config.record_file.write(json.dumps(self_as_dict) + "\n")
+            self.config.record_file.flush()
+            print('query recorded')

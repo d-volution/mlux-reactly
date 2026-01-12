@@ -20,7 +20,7 @@ class Encoding(Enum):
     rawtextline = "rawtextline"
 
 
-def call_llm(context: List[CtxMessage], llm: LLM) -> str:
+def call_llm(context: List[CtxMessage], llm: LLM, *, tracer: Tracer) -> str:
     response = ollama.chat(
             model=llm.model,
             messages=[{
@@ -29,6 +29,18 @@ def call_llm(context: List[CtxMessage], llm: LLM) -> str:
             } for msg in context]
         )
     return str(response["message"]["content"])
+
+def call_llm2(sys_prompt: str, conversation_section: str, llm: LLM, expected_output_encoding: Encoding, *, tracer: Tracer) -> str:
+    call_tracer = tracer.on('llmcall', {'sys_prompt': sys_prompt, 'prompt': conversation_section})
+    context = [
+        CtxMessage(Role.System, sys_prompt),
+        CtxMessage(Role.User, conversation_section)
+    ]
+    llm_response = call_llm(context, llm, tracer=tracer)
+    result = llm_response.replace("\n", "") if expected_output_encoding == Encoding.rawtextline else json.loads(llm_response)
+    call_tracer.on('complete', {'result': result})
+    return result
+    
 
 
 
@@ -174,22 +186,18 @@ class Stage:
     llm: LLM
 
     def __call__(self, input_data: Dict[str, Any], llm: LLM|None = None, tracer: Tracer = ZeroTracer(), *, tries: int|None = None):
-        local_tracer = tracer.on("stage_run_" + self.name, {'sys_prompt': self.sys_prompt})
-
+        stage_tracer = tracer.on("stage", {'name': self.name})
         conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
-        local_tracer.add_arg('conversation', conversation_section)
 
         for try_nr in range(tries or self.tries):
-            context = [
-                CtxMessage(Role.System, self.sys_prompt),
-                CtxMessage(Role.User, conversation_section)
-            ]
-            llm_response = call_llm(context, llm or self.llm)
-            
-            deserialized = llm_response.replace("\n", "") if self.output[1].encoding == Encoding.rawtextline else json.loads(llm_response)
-            local_tracer.on("stage_result", {'result': deserialized})
+            stage_tracer.on('try', {'nr': try_nr})
+
+            deserialized = call_llm2(self.sys_prompt, conversation_section, llm, self.output[1].encoding, tracer=stage_tracer)
+
+            stage_tracer.on("complete", {'result': deserialized})
             return deserialized
 
+        stage_tracer.on('failed', {'reason_code': 'run_out_of_tries'})
         return None # if no try was successful
 
 

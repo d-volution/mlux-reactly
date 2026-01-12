@@ -15,13 +15,13 @@ class ToolRunRecord:
 
 
 def run_tool(tool: Tool, input: Dict[str, Any], caller_tracer: Tracer) -> Any:
-    tracer = caller_tracer.on("run_tool", locals())
+    tracer = caller_tracer.on("toolrun", {'tool': tool})
     try:
         result = tool.run(**input)
-        tracer.on("tool_result", {'result': result})
+        tracer.on("complete", {'result': result})
     except Exception as e:
         result = f"tool failed: {e}"
-        tracer.on("tool_failure", {'result': result})
+        tracer.on("failed", {'result': result, 'exception': e})
     return result
 
 
@@ -237,12 +237,12 @@ can_answer_task = make_stage(
 # main
 
 def run_subtask(task_description: str, tools: List[Tool], subtask_results: List[TaskResult], llm: LLM, caller_tracer: Tracer) -> str:
-    task_tracer = caller_tracer.on("run_subtask", locals())
+    task_tracer = caller_tracer.on("task", {'description': task_description})
     tool_runs: List[ToolRunRecord] = []
 
     enhanced_description = enhance_task_description({'Task': task_description, 'Tools': tools, 'Results': subtask_results}, llm, task_tracer)
     for i in range(10):
-        tracer = task_tracer.on("task_round", {'round': i})
+        tracer = task_tracer.on("try", {'nr': i})
         chosen_tool_name = choose_tool_for_task({'Task': enhanced_description, 'Tools': tools}, llm, tracer)
         chosen_tool = next((tool for tool in tools if tool.name == chosen_tool_name), None)
         if chosen_tool is None:
@@ -254,12 +254,12 @@ def run_subtask(task_description: str, tools: List[Tool], subtask_results: List[
         if can_answer != False:
             break
     subanswer = answer_task({'Task': enhanced_description, 'History': tool_runs}, llm, task_tracer)
-    task_tracer.on("answer", {'answer': subanswer})
+    task_tracer.on("complete", {'result': subanswer})
     return str(subanswer)
 
 
 def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, agent_tracer: Tracer) -> str:
-    tracer = agent_tracer.on("run_query", locals())
+    tracer = agent_tracer.on("query", {'user_question': user_question})
     subtask_results: List[TaskResult] = []
     
     subtasks = split_user_question({'Question': user_question, 'Tools': tools}, llm=llm, tracer=tracer)
@@ -270,6 +270,5 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
 
     answer = str(answer_user_question({'Question': user_question, 'History': history, 'Results': subtask_results}, llm, tracer))
 
-    tracer.add_arg("agent_response", answer)
-    tracer.reset()
+    tracer.on("complete", {'result': answer})
     return answer
