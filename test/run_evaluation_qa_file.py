@@ -1,0 +1,76 @@
+from typing import List, Dict, Any, Callable
+from dataclasses import dataclass
+import json
+import sys
+
+from mlux_reactly import LLM
+from test_types import Example, ExampleCase, AgentConfig, AgentContructor, at_or
+from test_support import run_hotpotlike_examples
+from test_tracer import TestTracer
+from tools import calculator, text_count, wikipedia_search, make_rag_for_documents, Document
+
+
+def parse_hotspot_file(file_data: List[Dict[str, Any]]) -> List[ExampleCase]:
+    datapoints = []
+    for dp in file_data:
+        example = Example(
+            dp.get('_id'),
+            dp.get('question'),
+            dp.get('answer'),
+        )
+        documents = [Document(text="\n".join(doc[1]), metadata={'document_name': doc[0]}) for doc in dp.get('context')]
+        agent_config = AgentConfig(
+            tools=[make_rag_for_documents(documents), calculator, text_count]
+        )
+        datapoints.append(ExampleCase(example, agent_config))
+    return datapoints
+
+
+def parse_custom_qa_file(file_data: List[Dict[str, Any]]) -> List[ExampleCase]:
+    example_cases = []
+    for i, dp in enumerate(file_data):
+        example = Example(
+            'QA' + str(i),
+            dp.get('question'),
+            dp.get('answer'),
+        )
+        agent_config = AgentConfig(
+            tools=[wikipedia_search, calculator, text_count]
+        )
+        example_cases.append(ExampleCase(example, agent_config))
+    return example_cases
+
+
+
+@dataclass
+class TestInfo:
+    parse_fn: Callable[[Any], ExampleCase]
+    default_set: str
+    available_sets: Dict[str, str]
+
+available_tests: Dict[str, TestInfo] = {
+    'hotpot': TestInfo(parse_hotspot_file, 'train', {
+        'train': 'test-files/hotpot/hotpot_train_v1.1_FIRST_1000.json'
+    }),
+    'qa': TestInfo(parse_custom_qa_file, '', {
+        'wiki1': 'test-files/custom-qa-sets/wikipedia-1.json'
+    })
+}
+
+
+async def qa_file_test_fn(test_name: str, test_param: str|None, agent_constr: AgentContructor, llm: LLM):
+    test = available_tests[test_name]
+    param_splits = (test_param or "").split(':')
+    set_name = at_or(param_splits, 0, test.default_set)
+    start_pos = int(at_or(param_splits, 1, 0))
+    size = int(at_or(param_splits, 2, 1))
+    if set_name not in test.available_sets:
+        raise AssertionError(f"{test_name} test: param set name '{set_name}' not available")
+    file_name = test.available_sets[set_name]
+
+    with open(file_name, 'r') as file:
+        data = json.load(file)
+        parse_fn = test.parse_fn
+        datapoints = parse_fn(data[start_pos:start_pos+size])
+        evaluation = await run_hotpotlike_examples(datapoints, agent_constr, TestTracer(stream=sys.stdout))
+        return evaluation

@@ -14,8 +14,12 @@
 # Python
 *.egg-info/
 
+# config
+.env
+
 # other
 
 *_query_record.jsonl
 xxxx_random_stuff*
 evaluation_results.csv
+test/tryout_*

@@ -1,0 +1,72 @@
+[
+  {
+    "question": "Which river runs through the city that has Kumitz and Gritschach as its districts, and how long in kilmeters is the river?",
+    "answer": "Drava/Drave, 710km / 724km",
+    "note": "Villach",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=3"]
+  },
+  {
+    "question": "How is the debut studio album released 2014 from the Danish singer called, who was featured in the song \"One More\"?",
+    "answer": "No Mythologies to Follow",
+    "note": "MØ",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=2"]
+  },
+  {
+    "question": "How many years are between the establishment of 'Banks Holdings Sports and Cultural Club Ground' and the first air date of XHQMGU-TDT (channel 10) from Mexico?",
+    "answer": "54 years",
+    "note": "1964 to 2 May 2018",
+    "tools": ["wikipedia", "calculator"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=3"]
+  },
+  {
+    "question": "Where in Colombia was the member of the FARC born, who was replaced in 2010 by another member known as Pastor Alape?",
+    "answer": "Icononzo, Tolima, Colombia",
+    "note": "Víctor Julio Suárez Rojas",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=2"]
+  },
+  {
+    "question": "When did the season of the HBO series Game of Thrones premier in the US, that was filmed in the village Ballintoy?",
+    "answer": "April 1, 2012",
+    "note": "Season two",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=2"]
+  },
+  {
+    "question": "The singer and writer of the album 'Romance Is on the Rise' played her best known acting role as title character in a film from 1968. Who wrote this film?",
+    "answer": "Michael Sarne",
+    "note": "Film: Joanna (1968)",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=3"]
+  },
+  {
+    "question": "As of 2024, which of the following municipalities in the province of A Coruña has the heigest population: Boimorto, Boiro, Mazaricos, Ordes?",
+    "answer": "Boiro",
+    "note": "Population comparison",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=1"]
+  },
+  {
+    "question": "What is the E-number of the food additive 'Ammonium adipate'?",
+    "answer": "E359",
+    "note": "",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=1"]
+  },
+  {
+    "question": "On which dates where the three partial solar eclipses in the year, when the Toyota Carina was introduced in Europe?",
+    "answer": "January 5, July 30, December 24 (1971)",
+    "note": "",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=2"]
+  },
+  {
+    "question": "Who founded the school that the person, who was the Crown Jeweller from 1962 till 1991, attended?",
+    "answer": "Richard FitzJames",
+    "note": "King's School, Bruton",
+    "tools": ["wikipedia"],
+    "tags": ["handmade-wikipedia", "multihop", "hops=3"]
+  }
+]

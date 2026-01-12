@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from typing import Dict, List, Any, Callable
 from dataclasses import dataclass
 import argparse
@@ -9,7 +11,7 @@ import hashlib
 from test_types import Agent, AgentContructor, TestFunc, as_list
 from mlux_reactly import ReactlyAgent, LLM, Tracer
 from llama_index_agent import LlamaFunctionAgentWrapper, LlamaReActAgentWrapper
-from run_evaluation_hotpot import hotpot_test_fn
+from run_evaluation_qa_file import qa_file_test_fn
 
 
 
@@ -50,7 +52,8 @@ class EvalRun:
 
 
 available_tests: Dict[str, TestFunc] = {
-    'hotpot': hotpot_test_fn,
+    'hotpot': qa_file_test_fn,
+    'qa': qa_file_test_fn,
 }
 available_agents: Dict[str, AgentContructor] = {
     'reactly': ReactlyAgent,
@@ -143,7 +146,7 @@ async def main() -> None:
         agent = available_agents[run.agent_name]
         llm = available_llms[run.llm]
 
-        evaluation = await test_fn(run.test_param, agent, llm)
+        evaluation = await test_fn(run.test, run.test_param, agent, llm)
         results.append({
             'i': i,
             'run': run,
