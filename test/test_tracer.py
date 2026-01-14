@@ -52,6 +52,18 @@ def format_json_line(data: Any) :
 class FormatConfig:
     colored: bool = True
 
+def format_failed_event_msg(event: Event) -> str:
+    reason_code = event.args.get('reason_code', '')
+    error_msg = str(event.args.get('exception', ''))
+    tries = str(event.args.get('tries', ''))
+
+    parts: List[str] = [
+        reason_code,
+        ': ' if reason_code and error_msg else '',
+        error_msg,
+        f", {tries} tries" if tries else ''
+    ]
+    return ''.join(parts)
 
 def format_event_compact(event: Event, *, level: int = 0, format_config: FormatConfig = FormatConfig()) -> str:
     lines = []
@@ -74,8 +86,7 @@ def format_event_compact(event: Event, *, level: int = 0, format_config: FormatC
     elif key == 'try' and arg_nr != 0:
         headline = f"{ERRCOLOR}{"  "*level}* retry: {arg_nr}{RESET}"
     elif key == 'failed':
-        msg = event.args.get('reason_code', str(event.args.get('exception', '')))
-        headline = f"{ERRCOLOR}{headline}: {msg}{RESET}"
+        headline = f"{ERRCOLOR}{headline}: {format_failed_event_msg(event)}{RESET}"
     lines.append(headline)
     for ev in event.sub:
         if ev.key in ['complete', 'llmcall']:
@@ -87,6 +98,11 @@ def format_event_compact(event: Event, *, level: int = 0, format_config: FormatC
     
 
 
+def format_tracer_compact(tracer: Tracer, *, format_config: FormatConfig = FormatConfig()) -> str:
+    if isinstance(tracer, TestTracer):
+        return format_event_compact(tracer.event, format_config=format_config)
+    else:
+        return ""
 
 
 ##########################
@@ -118,9 +134,6 @@ class TestTracer(Tracer):
     def add_arg(self, arg_name: str, arg: Any):
         self.event.args[arg_name] = arg
 
-    def format_compact(self) -> str:
-        return format_event_compact(self.event)
-
     def _record_to_file(self) -> None:
         if self.config.record_file is not None:
             self_as_dict = {
@@ -131,4 +144,3 @@ class TestTracer(Tracer):
             }
             self.config.record_file.write(json.dumps(self_as_dict) + "\n")
             self.config.record_file.flush()
-            print('query recorded')
