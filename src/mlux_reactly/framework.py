@@ -19,6 +19,23 @@ class Encoding(Enum):
     JSON = "json"
     rawtextline = "rawtextline"
 
+_UNUSED_sentinel = object()
+
+def retry(nr_tries: int, tracer: Tracer, fn: Callable, *, or_return = _UNUSED_sentinel):
+    last_err: Exception | None = None
+    for try_nr in range(nr_tries):
+        tracer.on('try', {'nr': try_nr})
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+    assert last_err is not None
+    tracer.on('failed', {'reason_code': 'run_out_of_tries', 'exception': last_err, 'tries': nr_tries})
+    if or_return is _UNUSED_sentinel:
+        raise last_err
+    else:
+        return or_return
+
 
 def call_llm(context: List[CtxMessage], llm: LLM, *, tracer: Tracer) -> str:
     response = ollama.chat(
@@ -189,16 +206,13 @@ class Stage:
         stage_tracer = tracer.on("stage", {'name': self.name})
         conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
 
-        for try_nr in range(tries or self.tries):
-            stage_tracer.on('try', {'nr': try_nr})
+        deserialized = retry(tries or self.tries, stage_tracer, 
+                                 lambda: call_llm2(self.sys_prompt, conversation_section, llm, self.output[1].encoding, tracer=stage_tracer), or_return=None)
 
-            deserialized = call_llm2(self.sys_prompt, conversation_section, llm, self.output[1].encoding, tracer=stage_tracer)
+        stage_tracer.on("complete", {'result': deserialized})
 
-            stage_tracer.on("complete", {'result': deserialized})
-            return deserialized
-
-        stage_tracer.on('failed', {'reason_code': 'run_out_of_tries'})
-        return None # if no try was successful
+        return deserialized
+    
 
 
 def as_labeled_format(original: Tuple[str, FFFF|str]) -> Tuple[str, FFFF]:
