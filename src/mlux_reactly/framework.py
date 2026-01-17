@@ -1,64 +1,86 @@
 from typing import Callable, Any, Tuple, List, Dict
-from dataclasses import dataclass, asdict, is_dataclass
+from dataclasses import dataclass, asdict, is_dataclass, replace, field
 from enum import Enum
 import json
 import ollama
-from .types import LLM, Tracer, ZeroTracer
+from .types import Ctx, LLM, Tracer, ZeroTracer, _UNUSED_sentinel
 
-class Role(Enum):
-    System = "system"
-    User = "user"
-    Assistant = "assistant"
 
 @dataclass
-class CtxMessage:
-    role: Role
-    content: str
+class FormatDescr:
+    template: str
+    rules: List[str]
+    default: Any
+    preshape_fn: Callable[[Any], Any] | None
+    preshape_requires_type: type|None
+    label: str
 
-class Encoding(Enum):
-    JSON = "json"
-    rawtextline = "rawtextline"
-
-_UNUSED_sentinel = object()
-
-def retry(nr_tries: int, tracer: Tracer, fn: Callable, *, or_return = _UNUSED_sentinel):
-    last_err: Exception | None = None
-    for try_nr in range(nr_tries):
-        tracer.on('try', {'nr': try_nr})
-        try:
-            return fn()
-        except Exception as e:
-            last_err = e
-    assert last_err is not None
-    tracer.on('failed', {'reason_code': 'run_out_of_tries', 'exception': last_err, 'tries': nr_tries})
-    if or_return is _UNUSED_sentinel:
-        raise last_err
-    else:
-        return or_return
-
-
-def call_llm(context: List[CtxMessage], llm: LLM, *, tracer: Tracer) -> str:
-    response = ollama.chat(
-            model=llm.model,
-            messages=[{
-                'role': msg.role.name.lower(),
-                'content': msg.content
-            } for msg in context]
+    def as_list(self, label: str = '', *, add_rules: List[str] = []):
+        return FormatDescr(
+            template=f"[{self.template}]",
+            rules=self.rules + add_rules,
+            preshape_fn=(lambda elements: [self.preshape_fn(element) for element in elements]) 
+            if self.preshape_fn is not None else None,
+            preshape_requires_type=list,
+            default=[],
+            label=label
         )
-    return str(response["message"]["content"])
 
-def call_llm2(sys_prompt: str, conversation_section: str, llm: LLM, expected_output_encoding: Encoding, *, tracer: Tracer) -> str:
-    call_tracer = tracer.on('llmcall', {'sys_prompt': sys_prompt, 'prompt': conversation_section})
-    context = [
-        CtxMessage(Role.System, sys_prompt),
-        CtxMessage(Role.User, conversation_section)
-    ]
-    llm_response = call_llm(context, llm, tracer=tracer)
-    result = llm_response.replace("\n", "") if expected_output_encoding == Encoding.rawtextline else json.loads(llm_response)
-    call_tracer.on('complete', {'result': result})
-    return result
+    def with_label(self, new_label: str) -> 'FormatDescr':
+        return replace(self, label=new_label)
+
+def make_format(
+        template: Any,
+        *, 
+        rules: List[str] = [],
+        default: Any = None,
+        preshape_fn: Callable[[Any], Any] | None = None,
+        preshape_requires_type: type|None = None,
+        label: str = ""
+    ) -> FormatDescr:
+    return FormatDescr(
+        template=format_data_explicit(template, None, ctx='make_format_descr:' + label),
+        rules=rules,
+        default=default,
+        preshape_fn=preshape_fn,
+        preshape_requires_type=preshape_requires_type,
+        label=label,
+    )
+
+@dataclass
+class Stage:
+    name: str
+    static_prompt: str
+    input_formats: List[FormatDescr]
+    output_format: FormatDescr
+    tries: int
+    or_return: Any # return this if stage failed
+
+
+
+def call_llm(sys_prompt: str, conversation_section: str, llm: LLM, *, tracer: Tracer) -> str:
+    tracer = tracer.on('llmcall', {'sys_prompt': sys_prompt, 'prompt': conversation_section})
+
+    messages = []
+    if sys_prompt:
+        messages.append({'role': 'system', 'content': sys_prompt})
+    messages.append({'role': 'user','content': conversation_section})
+
+
+    #print(f"<----PROMPT VON HIER>{conversation_section}<----PROMPT BIS HIER>")
+
+
+
+    response_ollama = ollama.chat(
+            model=llm.model,
+            messages=messages,
+    )
+    response_content = str(response_ollama["message"]["content"])
+    #print(f"<----VON HIER>{'<-|||->'.join([m['content'] for m in messages])}<----BIS HIER>")
     
 
+    tracer.on('complete', {'result': response_content})
+    return response_content
 
 
 
@@ -75,100 +97,71 @@ def make_json_serializable(data: Any):
         return make_json_serializable(data.tolist())
     return str(data)
 
-
-@dataclass
-class FFFF:
-    """FFFF something about format"""
-    format_template: str
-    encoding: Encoding
-    rules: List[str] # FFF specific rules
-    preshape_fn: Callable[[Any], Any] | None
-    default: Any
+def serialize_data(data) -> str:
+    serializable = make_json_serializable(data)
+    return json.dumps(serializable)
 
 
-def serialize_data(data, encoding: Encoding) -> str:
-    if encoding == Encoding.JSON:
-        serializable = make_json_serializable(data)
-        return json.dumps(serializable)
-    else:
-        return str(data)
-
-def format_data_explicit(data, preshape_fn: Callable[[Any], Any] | None, encoding: Encoding, *, ctx: str = "") -> str:
+def format_data_explicit(data, preshape_fn: Callable[[Any], Any] | None, *, ctx: str = "", preshape_required: bool = True) -> str:
     try:
-        data_preshaped = data if preshape_fn is None else preshape_fn(data)
-        return serialize_data(data_preshaped, encoding)
+        data = data if preshape_fn is None else preshape_fn(data)
     except BaseException as e:
-        e.add_note(f"in {ctx}: format_data_explicit")
+        if preshape_required:
+            e.add_note(f"in {ctx}: format_data_explicit: preshape")
+            raise e
+    try:
+        return serialize_data(data)
+    except BaseException as e:
+        e.add_note(f"in {ctx}: format_data_explicit: serialize")
         raise e
+            
 
-def format_data(data, ff: FFFF, *, ctx: str = "") -> str:
-    return format_data_explicit(data, ff.preshape_fn, ff.encoding, ctx=ctx)
+def format_data(data, format: FormatDescr, *, ctx: str = "", preshape_required: bool = True) -> str:
+    return format_data_explicit(data, format.preshape_fn, ctx=ctx, preshape_required=preshape_required)
 
 
-def make_ffff(template: Any, encoding = Encoding.JSON, *, rules = [], preshape_fn = None, default: Any = None) -> FFFF:
-    return FFFF(serialize_data(template, encoding), encoding=encoding, rules=rules, preshape_fn=preshape_fn, default=default)
 
-def ffff_as_list(ff: FFFF, *, add_rules: List[str] = []) -> FFFF:
-    return FFFF(
-        format_template=f"[{ff.format_template}, ...]",
-        encoding=Encoding.JSON,
-        rules=ff.rules + add_rules,
-        preshape_fn=(lambda elements: [ff.preshape_fn(element) for element in elements]) if ff.preshape_fn is not None else None,
-        default=[]
-    )
-
-def generate_conversation(data: Dict[str, Any], inputs: List[Tuple[str, FFFF]], output: Tuple[str, FFFF], with_output: bool = False, ctx: str = ""):
+def generate_conversation(data: Dict[str, Any], inputs: List[FormatDescr], output: FormatDescr, with_output: bool = False, ctx: str = ""):
     unhandled_input_labels = set(data.keys())
 
     conversation_section: str = ""
     for input in inputs:
-        input_label = input[0]
-        input_ff = input[1]
-        input_value = data.get(input_label, input_ff.default)
-        unhandled_input_labels.discard(input_label)
-        conversation_section += f"{input_label}: {format_data(input_value, input_ff, ctx=ctx+f": generate_conversation input {input_label}")}\n"
+        input_value = data.get(input.label, input.default)
+        unhandled_input_labels.discard(input.label)
+        conversation_section += f"{input.label}: {format_data(input_value, input, ctx=ctx+f": generate_conversation input {input.label}")}\n"
 
-    output_label = output[0]
-    output_ff = output[1]
-    conversation_section += f"{output_label}: "
+    conversation_section += f"{output.label}: "
     if with_output:
-        output_value = data.get(output_label)
-        unhandled_input_labels.remove(output_label)
-        conversation_section += format_data(output_value, output_ff,  ctx=ctx+f": generate_conversation output {output_label}")
+        output_value = data.get(output.label)
+        unhandled_input_labels.remove(output.label)
+        conversation_section += format_data(output_value, output,  ctx=ctx+f": generate_conversation output {output.label}", preshape_required=False)+'\n'
 
     if len(unhandled_input_labels) > 0:
-        e = ValueError(ctx+f"got input values with unknown labels")
+        e = ValueError(ctx+f" got input values with unknown labels")
         e.add_note(f"unknown labels: {unhandled_input_labels}")
         raise e
 
     return conversation_section
 
 
-
-
-FIXED_STATIC_RULES: List[str] = [
-    "NEVER explain your reasoning."
-]
-
-def generate_sys_prompt(
-        *,
-        stage_name: str, 
+def generate_static_prompt(
         stage_description: str, 
-        rules: List[str] = [],
-        inputs: List[Tuple[str, FFFF]],
-        output: Tuple[str, FFFF],
+        rules: List[str],
+        inputs: List[FormatDescr],
+        output: FormatDescr,
         good_examples: List[Dict[str, Any]],
-        bad_examples: List[Dict[str, Any]],
-        **kwargs) -> str:
+        bad_examples: List[Dict[str, Any]]) -> str:
     
     prompt_head = f"{stage_description}\n"
 
-    all_rules = FIXED_STATIC_RULES[:]
-    if output[1].encoding == Encoding.JSON:
-        all_rules.append("Output valid JSON. No extra text!")
+    all_rules = [
+        "Output valid JSON. No extra text!",
+        #"Output a single line of valid JSON. No extra text!",
+        #"STRICTLY follow the Format!"
+    ]
     all_rules.extend(rules)
     for input in inputs:
-        all_rules.extend(input[1].rules)
+        all_rules.extend(input.rules)
 
     rules_section = "# Rules\n\n"
     for rule in all_rules:
@@ -176,8 +169,8 @@ def generate_sys_prompt(
 
     format_section = "# Format\n\nThe format looks like this:\n\n"
     for input in inputs:
-        format_section += f"{input[0]}: {input[1].format_template}\n"
-    format_section += f"{output[0]}: {output[1].format_template}\n"
+        format_section += f"{input.label}: {input.template}\n"
+    format_section += f"{output.label}: {output.template}\n"
 
     good_examples_section = "# GOOD Examples\n\n" if len(good_examples) > 0 else ""
     for example in good_examples:
@@ -187,37 +180,25 @@ def generate_sys_prompt(
     for example in bad_examples:
         bad_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt bad example") + "\n"
 
-    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, bad_examples_section, "# Conversation\n\n"] if sec != ""])
+    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, bad_examples_section, "# Conversation\n"] if sec != ""])
     return sys_prompt
 
 
 
 
-@dataclass
-class Stage:
-    name: str
-    sys_prompt: str
-    inputs: List[Tuple[str, FFFF]]
-    output: Tuple[str, FFFF]
-    tries: int
-    llm: LLM
-
-    def __call__(self, input_data: Dict[str, Any], llm: LLM|None = None, tracer: Tracer = ZeroTracer(), *, tries: int|None = None):
-        stage_tracer = tracer.on("stage", {'name': self.name})
-        conversation_section = generate_conversation(input_data, inputs=self.inputs, output=self.output, ctx="stage_run")
-
-        deserialized = retry(tries or self.tries, stage_tracer, 
-                                 lambda: call_llm2(self.sys_prompt, conversation_section, llm, self.output[1].encoding, tracer=stage_tracer), or_return=None)
-
-        stage_tracer.on("complete", {'result': deserialized})
-
-        return deserialized
-    
 
 
-def as_labeled_format(original: Tuple[str, FFFF|str]) -> Tuple[str, FFFF]:
-    assert(isinstance(original, tuple))
-    return original if isinstance(original[1], FFFF) else (original[0], make_ffff(original[1], encoding=Encoding.rawtextline)) 
+
+def as_format_descr(original: Tuple[str, FormatDescr|str]|FormatDescr) -> FormatDescr:
+    if isinstance(original, FormatDescr):
+        return original
+    elif isinstance(original, tuple):
+        if isinstance(original[1], FormatDescr):
+            return original[1].with_label(original[0])
+        else:
+            return make_format(template=original[1], label=original[0])
+
+
 
 
 def make_stage(
@@ -225,24 +206,58 @@ def make_stage(
         stage_description: str, 
         *, 
         rules: List[str] = [],
-        inputs: List[Tuple[str, FFFF|str]],
-        output: Tuple[str, FFFF|str],
-        llm: LLM = LLM(""),
+        inputs: List[Tuple[str, FormatDescr|str]|FormatDescr],
+        output: Tuple[str, FormatDescr|str]|FormatDescr,
         tries: int = 1,
         good_examples: List[Dict[str, Any]] = [],
-        bad_examples: List[Dict[str, Any]] = []) -> Stage:
-    inputs = inputs_ = [as_labeled_format(input) for input in inputs]
-    output = output_ = as_labeled_format(output)
-    args = locals()
+        bad_examples: List[Dict[str, Any]] = [],
+        or_return: Any = _UNUSED_sentinel
+):
+    inputs = input_formats = [as_format_descr(format) for format in inputs]
+    output = output_format = as_format_descr(output)
+    return Stage(
+        stage_name,
+        generate_static_prompt(stage_description, rules, input_formats, output_format, good_examples, bad_examples),
+        input_formats,
+        output_format,
+        tries,
+        or_return
+    )
 
-    sys_prompt = generate_sys_prompt(**args)
-    stage = Stage(
-        stage_name, 
-        sys_prompt, 
-        inputs=inputs_,
-        output=output_, 
-        tries=tries, 
-        llm=llm)
-    return stage
 
+def run_stage(stage: Stage, input_data: Dict[str, Any], llm: LLM, tracer: Tracer, *, post_fn: Callable|None = None):
+    tracer = tracer.on("stage", {'name': stage.name})
 
+    try:
+        conversation_section = generate_conversation(input_data, inputs=stage.input_formats, output=stage.output_format, ctx="stage_run")
+    except Exception as e:
+        tracer.on('failed', {'reason_code': 'generate_conversation', 'exception': e})
+        return stage.or_return
+
+    last_err: Exception | None = None
+    err_reason_code = ''
+    for try_nr in range(stage.tries):
+        try:
+            try_tracer = tracer.on('try', {'nr': try_nr})
+
+            err_reason_code = 'llm'
+            llm_response = call_llm(stage.static_prompt, conversation_section, llm, tracer=try_tracer)
+            err_reason_code = 'json_parsing'
+            parsed_result = json.loads(llm_response)
+
+            err_reason_code = 'post_processing'
+            if post_fn is not None:
+                result = post_fn(parsed_result)
+            else:
+                result = parsed_result
+            tracer.on('complete', {'result': result})
+            return result
+        except Exception as e:
+            last_err = e
+            try_tracer.on('failed', {'reason_code': err_reason_code, 'exception': e})
+    assert last_err is not None
+    tracer.on('failed', {'reason_code': err_reason_code, 'exception': last_err, 'tries': stage.tries})
+    if stage.or_return is _UNUSED_sentinel:
+        raise last_err
+    else:
+        return stage.or_return
