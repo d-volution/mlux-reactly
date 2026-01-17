@@ -98,7 +98,7 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
     headline = f"{"  "*level}* {key}"
     details = ''
     if key == 'query':
-        headline += f" {event.args.get('user_question', '')}"
+        headline += f" {NCOLOR}{format_json_line(event.args.get('user_question'))}{RESET}"
     elif key == 'query_answer':
         headline += f" {event.args.get('answer', '')}"
     elif key == 'stage':
@@ -139,7 +139,7 @@ def format_tracer(tracer: Tracer, format_config: FormatConfig = FormatConfig()) 
     if isinstance(tracer, TestTracer):
         event = tracer.event
         for _ in range(3):
-            if event.key == 'root' and len(event.sub) > 0:
+            if event.key == 'root' and len(event.sub) > 0 and False:
                 event = event.sub[len(event.sub)-1]
         return format_event(event, format_config=format_config)
     else:
