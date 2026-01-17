@@ -2,6 +2,7 @@ from typing import List, Dict
 from dataclasses import dataclass
 import re
 import string
+import math
 from collections import Counter
 
 def normalize_answer(s):
@@ -89,13 +90,15 @@ def eval_results(correct_results: List[Result], agent_results: List[Result]) -> 
     metrics = {'em': 0, 'f1': 0, 'prec': 0, 'recall': 0,
         'sp_em': 0, 'sp_f1': 0, 'sp_prec': 0, 'sp_recall': 0,
         'joint_em': 0, 'joint_f1': 0, 'joint_prec': 0, 'joint_recall': 0}
+    if len(correct_results) <= 0:
+        return metrics
     for i, correct_result in enumerate(correct_results):
         agent_result = agent_results[i]
         if agent_result.id != correct_result.id:
             raise ValueError("result ids mismatch: agent {} != correct {}. index {}".format(agent_result.id, correct_result.id, i))
         can_eval_joint = True
         if not agent_result.answer:
-            print('missing answer {} "{}"'.format(correct_result.id, agent_result.answer))
+            #print('missing answer {} "{}"'.format(correct_result.id, agent_result.answer))
             can_eval_joint = False
         else:
             em, prec, recall = update_answer(metrics, agent_result.answer, correct_result.answer)

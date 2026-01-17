@@ -13,7 +13,8 @@ async def run_example_on_agent(example: Example, agent: Agent) -> Tuple[bool, Re
     # TODO: maybe retry, logging
     start_time = time.perf_counter()
     try:
-        result = agent.query(example.question)
+        result = agent.query("Answer the following question by *just* stating the questioned fact in a few words (For example, 'Where is the Eiffel Tower' would be best answered by 'Paris, France'. No explanation.)."
+                             " Question: " + example.question)
         answer: str
         duration: float
         if inspect.isawaitable(result):
@@ -27,7 +28,7 @@ async def run_example_on_agent(example: Example, agent: Agent) -> Tuple[bool, Re
         return False, Result(example.id, "", None), math.nan
     
 
-async def run_hotpotlike_examples(example_cases: List[ExampleCase], agent_constr: AgentContructor, tracer: Tracer, llm: LLM|None = None) -> Dict[str, float]:
+async def run_hotpotlike_examples(example_cases: List[ExampleCase], agent_constr: AgentContructor, tracer: Tracer, llm: LLM|None = None, talky: bool = True) -> Dict[str, float]:
     agent_results: List[Result] = []
 
     duration_total: float = 0
@@ -36,9 +37,12 @@ async def run_hotpotlike_examples(example_cases: List[ExampleCase], agent_constr
     nr_finished: int = 0
 
     for example_case in example_cases:
-        agent = agent_constr(tools=example_case.agent_config.tools, tracer=tracer)
+        agent = agent_constr(tools=example_case.agent_config.tools, tracer=tracer, llm=llm)
 
         finished, agent_result, duration = await run_example_on_agent(example_case.example, agent)
+
+        if talky:
+            print(f"=> {example_case.example.id[:6]}: '{example_case.example.question}' good: '{example_case.example.answer}' A: '{agent_result.answer}'")
 
         agent_results.append(agent_result)
         if finished:
@@ -54,7 +58,7 @@ async def run_hotpotlike_examples(example_cases: List[ExampleCase], agent_constr
         'duration_total': duration_total,
         'duration_min': duration_min,
         'duration_max': duration_max,
-        'duration_avg': duration_total / nr_finished,
+        'duration_avg': (duration_total / nr_finished) if nr_finished else math.nan,
         'nr_total': len(example_cases),
         'nr_finished': nr_finished,
         'nr_failed': len(example_cases) - nr_finished

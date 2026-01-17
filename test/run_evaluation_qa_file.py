@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import json
 import sys
 
-from mlux_reactly import LLM
+from mlux_reactly import LLM, Tracer
 from test_types import Example, ExampleCase, AgentConfig, AgentContructor, at_or
 from test_support import run_hotpotlike_examples
 from test_tracer import TestTracer
@@ -58,12 +58,13 @@ available_tests: Dict[str, TestInfo] = {
 }
 
 
-async def qa_file_test_fn(test_name: str, test_param: str|None, agent_constr: AgentContructor, llm: LLM):
+async def qa_file_test_fn(test_name: str, test_param: str|None, agent_constr: AgentContructor, llm: LLM, tracer: Tracer, talky: bool = True):
     test = available_tests[test_name]
     param_splits = (test_param or "").split(':')
     set_name = at_or(param_splits, 0, test.default_set)
     start_pos = int(at_or(param_splits, 1, 0))
     size = int(at_or(param_splits, 2, 1))
+    end_pos = start_pos+size
     if set_name not in test.available_sets:
         raise AssertionError(f"{test_name} test: param set name '{set_name}' not available")
     file_name = test.available_sets[set_name]
@@ -71,6 +72,8 @@ async def qa_file_test_fn(test_name: str, test_param: str|None, agent_constr: Ag
     with open(file_name, 'r') as file:
         data = json.load(file)
         parse_fn = test.parse_fn
-        datapoints = parse_fn(data[start_pos:start_pos+size])
-        evaluation = await run_hotpotlike_examples(datapoints, agent_constr, TestTracer(stream=sys.stdout))
+        if start_pos < 0 or start_pos >= len(data) or end_pos <= start_pos or end_pos >= len(data):
+            raise ValueError(f"invalid test range: got {start_pos} .. {end_pos}, available 0 .. {len(data)}")
+        datapoints = parse_fn(data[start_pos:end_pos])
+        evaluation = await run_hotpotlike_examples(datapoints, agent_constr, tracer, llm, talky=talky)
         return evaluation

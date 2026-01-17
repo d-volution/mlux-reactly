@@ -9,7 +9,7 @@ from pathlib import Path
 import hashlib
 
 from test_types import Agent, AgentContructor, TestFunc, as_list
-from mlux_reactly import ReactlyAgent, LLM, Tracer
+from mlux_reactly import ReactlyAgent, LLM, Tracer, ZeroTracer
 from llama_index_agent import LlamaFunctionAgentWrapper, LlamaReActAgentWrapper
 from run_evaluation_qa_file import qa_file_test_fn
 
@@ -18,27 +18,23 @@ from run_evaluation_qa_file import qa_file_test_fn
 argp = argparse.ArgumentParser()
 
 argp.add_argument(
-    "-tests", "-test",
+    "-tests", "-test", "-t",
     nargs="+",
     required=True,
     help="Test set name"
 )
 argp.add_argument(
-    "-agents", "-agent",
+    "-agents", "-agent", "-a",
     nargs="+",
     help="List of agent names"
 )
 argp.add_argument(
-    "-llms", "-llm",
+    "-llms", "-llm", "-l",
     nargs="+",
     help="List of LLM identifiers",
     default="qwen2.5:7b-instruct-q8_0"
 )
-argp.add_argument(
-    "-comment",
-    help="Free-form comment"
-)
-args = argp.parse_args()
+
 
 
 
@@ -61,40 +57,41 @@ available_agents: Dict[str, AgentContructor] = {
     'llama-func': LlamaFunctionAgentWrapper,
 }
 available_llms: Dict[str, LLM] = {
-    'qwen2.5:7b-instruct-q8_0': LLM('qwen2.5:7b-instruct-q8_0')
+    'qwen2.5:7b-instruct-q8_0': LLM('qwen2.5:7b-instruct-q8_0'),
 }
 
 def assert_arg(name: str, arg: str, availables: Dict[str, Any]):
     if arg not in availables.keys():
         raise AssertionError(f"command line argument {name} '{arg}' not available")
 
-for test in as_list(args.tests):
-    assert_arg('tests', test.split('/')[0], available_tests)
-for agent in as_list(args.agents):
-    assert_arg('agents', agent, available_agents)
-for llm in as_list(args.llms):
-    assert_arg('llms', llm, available_llms)
 
 
+def args_to_eval_runs(args_as_strings: List[str]|None = None) -> List[EvalRun]:
+    args = argp.parse_args(args_as_strings)
 
-runs: List[EvalRun] = []
-
-
-for test in as_list(args.tests):
+    for test in as_list(args.tests):
+        assert_arg('tests', test.split('/')[0], available_tests)
     for agent in as_list(args.agents):
-        for llm in as_list(args.llms):
-            test_param = "/".join(test.split('/')[1:])
-            runs.append(EvalRun(
-                test=test.split('/')[0],
-                test_param=test_param if test_param else None,
-                agent_name=agent,
-                llm=llm
-            ))
+        assert_arg('agents', agent, available_agents)
+    for llm in as_list(args.llms):
+        assert_arg('llms', llm, available_llms)
 
-for i, run in enumerate(runs):
-    print(f"{i}: {run}")
+    runs: List[EvalRun] = []
 
-print()
+    for test in as_list(args.tests):
+        for agent in as_list(args.agents):
+            for llm in as_list(args.llms):
+                test_param = "/".join(test.split('/')[1:])
+                runs.append(EvalRun(
+                    test=test.split('/')[0],
+                    test_param=test_param if test_param else None,
+                    agent_name=agent,
+                    llm=llm
+                ))
+
+    return runs
+
+
 
 # run evaluations
 
@@ -136,22 +133,26 @@ def evaluation_to_csv(run: EvalRun, run_index: int, evaluation: Dict[str, float]
 
 
 
-async def main() -> None:
+async def main_eval(runs: List[EvalRun], tracer: Tracer = ZeroTracer(), talky: bool = True) -> None:
     eval_time_start = datetime.now()
     results = []
     for i, run in enumerate(runs):
-        print(f"running {i}: {run}")
+        if talky:
+            print(f"running {i}: {run}")
 
         test_fn = available_tests[run.test]
         agent = available_agents[run.agent_name]
         llm = available_llms[run.llm]
 
-        evaluation = await test_fn(run.test, run.test_param, agent, llm)
+        evaluation = await test_fn(run.test, run.test_param, agent, llm, tracer, talky=talky)
         results.append({
             'i': i,
             'run': run,
             'evaluation': evaluation,
         })
+
+        if talky:
+            print(f"---> evaluation {i}: {evaluation}")
 
     results_file_path = Path('evaluation_results.csv')
     results_file_exists = results_file_path.exists()
@@ -162,10 +163,16 @@ async def main() -> None:
 
     with open(results_file_path, 'a') as csv_file:
         csv_file.write('\n'.join(csv_lines) + '\n')
-        
-        
+    
 
-    print("Done")
+
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    runs = args_to_eval_runs()
+
+    for i, run in enumerate(runs):
+        print(f"{i}: {run}")
+    print()
+
+    asyncio.run(main_eval(runs))
+    print("Done")
