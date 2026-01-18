@@ -180,7 +180,7 @@ def generate_static_prompt(
     for example in bad_examples:
         bad_examples_section += generate_conversation(example, inputs=inputs, output=output, with_output=True, ctx="system_prompt bad example") + "\n"
 
-    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, bad_examples_section, "# Conversation\n"] if sec != ""])
+    sys_prompt = "\n".join([sec for sec in [prompt_head, rules_section, format_section, good_examples_section, bad_examples_section, "# Working Context:\n"] if sec != ""])
     return sys_prompt
 
 
