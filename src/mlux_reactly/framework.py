@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict, is_dataclass, replace, field
 from enum import Enum
 import json
 import ollama
-from .types import Ctx, LLM, Tracer, ZeroTracer, _UNUSED_sentinel
+from .types import LLM, Tracer, ZeroTracer, _UNUSED_sentinel
 
 
 @dataclass

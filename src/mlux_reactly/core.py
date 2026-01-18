@@ -2,7 +2,8 @@ from typing import Any, List, Dict
 from enum import Enum
 from dataclasses import dataclass, asdict
 from .types import LLM, Tool, Task, TaskResult, ChatQA, Tracer, Answer, AgentConfig
-from .stages import split_question_into_tasks, enhance_task_description, rate_tools_for_task, make_tool_input, try_answer, ToolRunRecord
+from .stages import enhance_user_question, split_question_into_tasks, enhance_task_description
+from .stages import rate_tools_for_task, make_tool_input, try_answer, ToolRunRecord
 
 
 
@@ -25,7 +26,9 @@ def run_tool(tool: Tool, input: Dict[str, Any], caller_tracer: Tracer) -> Any:
 def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm: LLM, agent_tracer: Tracer, agent_config: AgentConfig) -> str:
     query_tracer = agent_tracer.on("query", {'user_question': user_question})
 
-    tasks: List[Task] = split_question_into_tasks(user_question, tools, llm, query_tracer)
+    enhanced_user_question = enhance_user_question(user_question, history, llm, query_tracer)
+
+    tasks: List[Task] = split_question_into_tasks(enhanced_user_question, tools, llm, query_tracer)
     task_results: List[TaskResult] = []
 
     for original_task in tasks:
@@ -37,7 +40,7 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
         proposed_task_answers: List[TaskResult] = []
         for try_nr in range(agent_config.max_nr_tries_per_task):
             tracer.on('try', {'nr': try_nr})
-            rated_tools = rate_tools_for_task(task, tools, llm, tracer, include_model=True)
+            rated_tools = rate_tools_for_task(task, tools, llm, tracer)
             rated_tools.sort(key=lambda rt: -rt.score)
 
             for rated_tool in rated_tools:
@@ -56,6 +59,6 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
                 proposed_task_answers.append(TaskResult(task.description, task_answer.answer, task_answer.satisfaction))
                 task = Task(enhance_task_description(original_task.description, proposed_task_answers, llm, tracer))
         
-    answer = try_answer(user_question, [ToolRunRecord('subtask', t.task, t.result) for t in task_results], llm, query_tracer)
+    answer = try_answer(enhanced_user_question, [ToolRunRecord('subtask', t.task, t.result) for t in task_results], llm, query_tracer)
     query_tracer.on('complete', {'result': answer.answer})
     return answer.answer

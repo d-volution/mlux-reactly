@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 from dataclasses import dataclass
 
-from .types import AnyBasic, T, Task, TaskResult, Answer, LLM, Tracer, Tool
+from .types import AnyBasic, T, Task, TaskResult, Answer, LLM, Tracer, Tool, ChatQA
 from .framework import make_format, FormatDescr, make_stage, run_stage
 
 
@@ -18,6 +18,10 @@ class ToolRunRecord:
     input: Any
     result: Any
 
+_qa_format = make_format(
+    {'question': 'a question from the user', 'answer': 'answer from the agent'},
+    preshape_fn=lambda qa: {'question': qa.question, 'answer': qa.response}
+)
 
 _tools_concise_format = make_format(
     {"name of tool": "description of tool"},
@@ -36,7 +40,7 @@ _task_description_format = make_format(
     label='Task'
 )
 
-task_specification_format = make_format(
+_task_specification_format = make_format(
     {'description': 'description of the task', 'tools': ['name of tool 1', '...']},
     label='Tool'
 )
@@ -73,8 +77,6 @@ _EXAMPLE_TOOL_RATINGS = [
     RatedTool(_EXAMPLE_TOOL_COWORKDB, 0.02),
     RatedTool(_EXAMPLE_TOOL_HEXCOLOR, 0.96),
 ]
-
-_MODEL_TOOL: Tool = Tool('model', '', {})
 
 
 
@@ -125,9 +127,6 @@ _split_question_into_tasks_stage = make_stage(
             ],
         }
     ],
-    bad_examples=[
-        
-    ],
     tries = 3,
     or_return=[]
 )
@@ -138,6 +137,50 @@ def split_question_into_tasks(user_question: str, tools: List[Tool], llm: LLM, t
 
     tasks: List[Task] = run_stage(_split_question_into_tasks_stage, {'Question': user_question, 'Tools': tools}, llm, tracer, post_fn=post_process)
     return tasks
+
+
+
+
+
+
+
+
+
+
+_enhance_user_question_stage = make_stage(
+    'enhance_user_question',
+    """You are a question enhancing stage.\nYour job is to Enhance the current user Question using information of previous interactions in the chat History."""
+    """The following stages will try to answer the Question using only your Enhanced question.""",
+    rules=OBJECTIVITY_RULES+[
+        "Include all informations from previous chat interactions *relevant* for answering this user Question."
+    ],
+    inputs=[
+        _qa_format.as_list('History'),
+        ('Question', 'the user question'),
+    ],
+    output=('Enhanced', 'Your enhanced user Question'),
+    good_examples=[
+        {
+            'History': [
+                ChatQA('Where does the prime minister live?', '10 Downing Street, London.'),
+                ChatQA('How old is he?', "51 years"),
+                ChatQA('Does he pay rent there?', "No, it's an official residence paided by the state.")
+            ],
+            'Question': "How much rent would someone pay for such a residence?",
+            'Enhanced': "How much rent would someone pay for a residence like the one that the Prime Minister lives in (in 10 Downing Street, London where the rent is paid for him by the state)."
+        }
+    ],
+    or_return="",
+    tries=3
+)
+
+def enhance_user_question(user_question: str, history: List[ChatQA], llm: LLM, tracer: Tracer) -> str:
+    if len(history) == 0:
+        return user_question
+    enhanced = run_stage(_enhance_user_question_stage, {'History': history, 'Question': user_question}, llm, tracer)
+    return enhanced or user_question
+
+
 
 
 
@@ -199,12 +242,11 @@ _rate_tools_for_task_stage = make_stage(
             'Ratings': _EXAMPLE_TOOL_RATINGS,
         }
     ],
-    bad_examples=[],
     tries = 2
 )
 
 
-def rate_tools_for_task(task: Task, tools: List[Tool], llm: LLM, tracer: Tracer, *, include_model: bool = False) -> List[RatedTool]:
+def rate_tools_for_task(task: Task, tools: List[Tool], llm: LLM, tracer: Tracer) -> List[RatedTool]:
     available_tools_by_name = {t.name: t for t in tools}
     def post_process(parsed: AnyBasic) -> List[RatedTool]:
         result: List[RatedTool] = []
@@ -239,7 +281,6 @@ _make_tool_input_stage = make_stage(
     good_examples=[
         {'Task': "Find the square of 123.", 'Tool': _EXAMPLE_TOOL_SQR, 'Input': {'number': 123}}
     ],
-    bad_examples=[],
     tries = 2
 )
 
