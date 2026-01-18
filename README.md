@@ -25,6 +25,12 @@ ollama pull qwen2.5:7b-instruct-q8_0
 ollama pull nomic-embed-text
 ```
 
+### .env setup
+Add a working Wikimedia API token to a .env file in the repo root directory (used by the Wikipedia tool):
+```
+WIKIMEDIA_API_TOKEN="..."
+```
+
 ### Run simple chatbot
 ```sh
 python3 test/chat.py
