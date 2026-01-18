@@ -60,7 +60,7 @@ def make_json_serializable(data: Any):
 def format_json_line(data: Any):
     if data is None:
         return ""
-    return json.dumps(make_json_serializable(data))
+    return json.dumps(make_json_serializable(data), ensure_ascii=False)
 
 
 def format_failed_event_msg(event: Event) -> str:
@@ -85,7 +85,6 @@ def _format_text(prefix: str, text: str) -> str:
 def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = FormatConfig()) -> str:
     lines = []
     key = event.key
-    nextlevel = level+1
 
     if not (format_config.show_other or format_config.show.get(key, False)):
         return
@@ -99,8 +98,8 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
     details = ''
     if key == 'query':
         headline += f" {NCOLOR}{format_json_line(event.args.get('user_question'))}{RESET}"
-    elif key == 'query_answer':
-        headline += f" {event.args.get('answer', '')}"
+    elif key == 'task':
+        headline += f" {NCOLOR}{format_json_line(event.args.get('task'))}{RESET}"
     elif key == 'stage':
         headline += f" {NCOLOR}'{event.args.get('name', '')}'{RESET} => {format_json_line(event.args.get('result'))}"
     elif key == 'toolrun':
@@ -125,11 +124,15 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
         lines.append(details)
 
     for ev in event.sub:
+        nextlevel = level+1
         if ev.key in ['complete', 'llmcall'] and not (format_config.show.get(ev.key, False) or not format_config.compact):
             continue
         if ev.key in ['try']:
             nextlevel=level
         lines.append(format_event(ev, level=nextlevel, format_config=format_config))
+
+    if key == 'query':
+        lines.append(f"{''.ljust(4)}{"  "*level} * query answer: {format_json_line(event.args.get('result'))}")
     return "\n".join([line for line in lines if line != ""])
     
 
