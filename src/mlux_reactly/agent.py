@@ -3,7 +3,7 @@ from typing import Callable
 from typing import get_origin, get_args, Annotated
 import inspect
 from io import StringIO
-from .types import LLM, Tool, ChatQA, Tracer, ZeroTracer
+from .types import LLM, Tool, ChatQA, Tracer, ZeroTracer, AgentConfig
 from .core import run_query
 
 
@@ -44,14 +44,16 @@ class ReactlyAgent:
             self, 
             tools: List[Tool | Callable], *, 
             tracer: Tracer = ZeroTracer(),
-            llm = LLM("qwen2.5:7b-instruct-q8_0")):
+            llm = LLM("qwen2.5:7b-instruct-q8_0"),
+            config: AgentConfig = AgentConfig()):
         self.tools = [tool_from_function(tool_fn) for tool_fn in tools]
         self.llm = llm
         self.tracer = tracer
         self.history: List[ChatQA] = []
+        self.config = config
 
     def query(self, user_question: str) -> str:
-        response = run_query(user_question, self.history, self.tools, self.llm, self.tracer)
+        response = run_query(user_question, self.history, self.tools, self.llm, self.tracer, self.config)
         self.history.append(ChatQA(user_question, response))
         return response
 

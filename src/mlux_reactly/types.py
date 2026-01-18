@@ -31,6 +31,7 @@ class Task:
 class TaskResult:
     task: str = ""
     result: str = ""
+    satisfaction: float = 0.0
 
 @dataclass
 class Answer:
@@ -54,6 +55,14 @@ class ZeroTracer(Tracer):
         return
     
 @dataclass
-class Ctx:
-    llm: LLM
-    tracer: Tracer = ZeroTracer()
+class AgentConfig:
+    """Various parameters to configure agent behaviour"""
+
+    max_nr_tries_per_task: int = 3
+    """Maximal number a single task is tried to solve/answer it"""
+
+    tool_use_rating_threshold: float = 0.5
+    """Minimum rating (score between 0 and 1) a tool needs to be rated for a specific task in order to be used for this task"""
+
+    task_answer_satisfaction_threshold: float = 0.5
+    """Minimum satisfaction score (between 0 and 1) an answer of a task must have in order to be accepted, otherwise the task will be retried."""
