@@ -18,7 +18,7 @@ eval_tracer = test_tracer #TestTracer(config=TraceConfig(session='chateval', rec
 tracer = test_tracer
 
 llm = LLM("qwen2.5:7b-instruct-q8_0")
-agent = ReactlyAgent(tools=[calculator, text_count, make_rag_for_folder("./test-files/rag-docs-default")], tracer=tracer, llm=llm)
+agent = ReactlyAgent(tools=[calculator, text_count, make_rag_for_folder("./test-files/rag-docs-default"), wikipedia_search], tracer=tracer, llm=llm)
 
 # helper
 
