@@ -47,11 +47,11 @@ _task_result_format = make_format(
     label='Result'
 )
 
-_rated_tool_format = make_format(
+_rated_tools_format = make_format(
     {"name of tool1": 0.123, "tool2": 0.456},
-    preshape_fn=lambda rated_tool: {rated_tool.tool.name: rated_tool.score},
+    preshape_fn=lambda rated_tools: {rated_tool.tool.name: rated_tool.score for rated_tool in rated_tools},
     preshape_requires_type=RatedTool,
-    label='Rated Tool'
+    label='Ratings'
 )
 
 _tool_runs_format = make_format(
@@ -94,12 +94,14 @@ OBJECTIVITY_RULES = [
 
 _split_question_into_tasks_stage = make_stage(
     'split_question_into_tasks',
-    """You are a task-splitting system.\nYour job is to decompose the user Question into the minimal ordered list of atomic Tasks required to answer it.""",
+    """You are a task-splitting system.\nYour job is to decompose the user Question into an ordered list of atomic Tasks required to answer it.""",
     rules = OBJECTIVITY_RULES + [
         "Do NOT answer the Question.",
         "Tasks must be strictly ordered.",
         "Do not merge multiple actions into one task.",
-        "If required information is missing, create a task to retrieve it."
+        "If required information is missing, create a task to retrieve it.",
+        "Each Task should only need a single Tool call to answer it.",
+        "Prefer many small tasks over few large tasks. For example, if the Question asks about different people or places, use one Task for each.",
     ],
     inputs = [
         ('Question', 'The user question'),
@@ -111,14 +113,20 @@ _split_question_into_tasks_stage = make_stage(
             'Tools': _EXAMPLE_TOOLS, 
             'Question': "What is the sqare of the year the coworker Mike was born?",
             'Tasks': ['Find out the date of birth for coworker Mike', "Square the year number of the date of birth."],
+        },
+         {
+            'Tools': _EXAMPLE_TOOLS, 
+            'Question': "How much more does a ton of oak wood cost than a ton of beech wood in Jessie's home country?",
+            'Tasks': [
+                "Determine the home country of Jessie.", 
+                "Determine the price of a ton of oak wood in Jessie's home country.", 
+                "Determine the price of a ton of beech wood in Jessie's home country.",
+                "Calculate the difference between the prices of wood."
+            ],
         }
     ],
     bad_examples=[
-        {
-            'Tools': _EXAMPLE_TOOLS, 
-            'Question': "What kind of wood is heavy?", 
-            'Tasks': ["Find a heavy kind of wood using the wood tool."]
-        }
+        
     ],
     tries = 3,
     or_return=[]
@@ -140,7 +148,8 @@ _enhance_task_description_stage = make_stage(
     'enhance_task_description',
     """You are a task enhancing stage.\nYour job is to Enhance the description of a Task with previous Results. The following stages will try to answer the task using only your Enhanced description.""",
     rules=OBJECTIVITY_RULES+[
-        "If the Results are unnecessary verbose, summarize them and filter out relevant information."
+        "If the Results are unnecessary verbose, summarize them and filter out relevant information.",
+        "The Enhanced description should explicitly state which information is asked for."
     ],
     inputs=[
         _task_result_format.as_list('Results'),
@@ -182,7 +191,7 @@ _rate_tools_for_task_stage = make_stage(
         ('Task', _task_description_format),
         _tools_concise_format
     ],
-    output=_rated_tool_format.as_list('Ratings'),
+    output=_rated_tools_format,
     good_examples=[
         {
             'Task': 'Lookup the ANSI color code of magenta.',
@@ -268,7 +277,7 @@ _try_answer_task_stage = make_stage(
                 {'tool': 'song_db', 'input': 'The Blue-Pink Song', 'result': {'title': 'The Blue-Pink Song', 'author': 'Helene Josh'}},
                 {'tool': 'music_tool', 'input': {'search': 'The Blue-Pink Song'}, 'result': {'work': 'The Blue-Pink Song', 'author': 'Laura Taylor'}}
             ], 
-            'Answer': {'answer': 'The Blue-Pink Song was probably written by Helene Josh or Laura Taylor.', 'satisfaction': 0.35, 'reason': 'The results contratict each other regarding the author.'},
+            'Answer': {'answer': 'The Blue-Pink Song was probably written by Helene Josh or Laura Taylor.', 'satisfaction': 0.35, 'reason': 'The results contradict each other regarding the author.'},
         },
         {
             'Task': "Determine the sensor size of a A123-camera.", 
@@ -276,7 +285,17 @@ _try_answer_task_stage = make_stage(
                 {'tool': 'tech_lookup', 'input': {'topic': 'cameras', 'model': 'A123'}, 'result': {'full_name': 'Ycam Solo A123', 'weight_kg': 1.5, 'sensor_size': 'full-frame'}},
                 {'tool': 'some_geo_tool', 'input': 'A123', 'result': 'The highway A123 in Australia connects cities in the north and south.'},
             ], 
-            'Answer': {'answer': "The A123-camera uses a 'full-frame' sized sensor.", 'satisfaction': 1.0},
+            'Answer': {'answer': "The A123-camera uses a 'full-frame' sized sensor.", 'satisfaction': 0.9},
+        },
+        {
+            'Task': "What movie stares Mike Simon in the role of Roy.", 
+            'Results': [
+                {'tool': 'cinema', 'input': {'query': 'Mike Simon as Roy'}, 'result': [
+                    {'page': 'Mike Simon (actor)', 'text': "Mike L. Simon is an US-american actor from New Jersey. He is known for various roles in TV and cinema."},
+                    {'page': 'Finish Winter Comes Back (movie)', 'text': "Finish Winter Comes Back is an action thriller, where a teenager called 'Roy' breaks into his own home."},
+                ]}
+            ], 
+            'Answer': {'answer': "The movie 'Finish Winter Comes Back' probably starres Mike Simon.", 'satisfaction': 0.24, 'reason': 'Results ambiguous about requested information.'},
         },
     ],
     tries = 2
