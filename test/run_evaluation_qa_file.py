@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Callable
 from dataclasses import dataclass
 import json
 import sys
+import os
 
 from mlux_reactly import LLM, Tracer
 from test_types import Example, ExampleCase, AgentConfig, AgentContructor, at_or
@@ -40,6 +41,12 @@ def parse_custom_qa_file(file_data: List[Dict[str, Any]]) -> List[ExampleCase]:
         example_cases.append(ExampleCase(example, agent_config))
     return example_cases
 
+def _load_available_sets(folder_path: str) -> Dict[str, str]:
+    try:
+        files = os.listdir(folder_path)
+        return {f.split('.')[0]: f"{folder_path}/{f}" for f in files if f.endswith('.json')}
+    except:
+        return {}
 
 
 @dataclass
@@ -52,9 +59,7 @@ available_tests: Dict[str, TestInfo] = {
     'hotpot': TestInfo(parse_hotspot_file, 'train', {
         'train': 'test-files/hotpot/hotpot_train_v1.1_FIRST_1000.json'
     }),
-    'qa': TestInfo(parse_custom_qa_file, '', {
-        'wiki1': 'test-files/custom-qa-sets/wikipedia-1.json'
-    })
+    'qa': TestInfo(parse_custom_qa_file, '', _load_available_sets('test-files/custom-qa-sets')),
 }
 
 
@@ -66,13 +71,13 @@ async def qa_file_test_fn(test_name: str, test_param: str|None, agent_constr: Ag
     size = int(at_or(param_splits, 2, 1))
     end_pos = start_pos+size
     if set_name not in test.available_sets:
-        raise AssertionError(f"{test_name} test: param set name '{set_name}' not available")
+        raise AssertionError(f"{test_name} test: param set name '{set_name}' not available. Available: {test.available_sets}")
     file_name = test.available_sets[set_name]
 
     with open(file_name, 'r') as file:
         data = json.load(file)
         parse_fn = test.parse_fn
-        if start_pos < 0 or start_pos >= len(data) or end_pos <= start_pos or end_pos >= len(data):
+        if start_pos < 0 or start_pos >= len(data) or end_pos <= start_pos or end_pos > len(data):
             raise ValueError(f"invalid test range: got {start_pos} .. {end_pos}, available 0 .. {len(data)}")
         datapoints = parse_fn(data[start_pos:end_pos])
         evaluation = await run_hotpotlike_examples(datapoints, agent_constr, tracer, llm, talky=talky)
