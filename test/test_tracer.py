@@ -112,9 +112,9 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
     elif key == 'llmcall':
         if not format_config.compact:
             details += _format_text('    => ', str(event.args.get('sys_prompt', '<--- sys prompt not available --->')))
-            details += _format_text('    -> ', str(event.args.get('prompt', '<--- prompt not available --->'))) + '<END of PROMPT>'
+            details += _format_text('    -> ', str(event.args.get('prompt', '<--- prompt not available --->')))
     elif key == 'complete':
-        details += _format_text('    -> ', str(event.args.get('result', '<--- sys prompt not available --->')))
+        details += _format_text('    -> ', str(event.args.get('result', '<--- prompt not available --->')))
     elif key == 'failed':
         headline = f"{ERRCOLOR}{headline}: {format_failed_event_msg(event)}{RESET}"
 
