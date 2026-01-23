@@ -13,6 +13,8 @@
 
 # Python
 *.egg-info/
+build/
+dist/
 
 # config
 .env

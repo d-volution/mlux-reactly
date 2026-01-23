@@ -1,12 +1,16 @@
 [project]
 name = "mlux-reactly"
-description = "A ReAct inspired Agent from scratch"
+description = " ReAct inspired Agent developed from scratch using Ollama. This agent uses task decomposition and uses provided tools."
 version = "0.1"
 authors = [
-  {name = "Donovan Käfer", email = "donovank00@unet.univie.ac.at"},
+  {name = "Donovan", email = "don.k@gmx.at"},
 ]
 requires-python = ">=3.12"
 dependencies = [
   "numexpr>=2.10",
   "ollama>=0.5",
 ]
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/d-volution/mlux-reactly"
