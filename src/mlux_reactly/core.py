@@ -48,7 +48,7 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
                     break
                 tool_input = make_tool_input(task, rated_tool.tool, llm, tracer)
                 tool_result = run_tool(rated_tool.tool, tool_input, tracer)
-                tool_results.append(ToolRunRecord(rated_tool.tool, tool_input, tool_result))
+                tool_results.append(ToolRunRecord(rated_tool.tool.name, tool_input, tool_result))
 
             task_answer = try_answer(task.description, tool_results, llm, tracer)
 
