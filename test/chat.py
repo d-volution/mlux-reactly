@@ -1,10 +1,6 @@
 import asyncio
 import traceback
-import sys
-import io
 import json
-from dotenv import load_dotenv
-load_dotenv()
 
 from mlux_reactly import ReactlyAgent, LLM, ZeroTracer
 from tools import calculator, text_count, make_rag_for_folder, wikipedia_search
@@ -30,15 +26,8 @@ def to_int(s: str, default: int | None = None) -> int | None:
 
 # chat loop:
 
-first = False
-
 while True:
-    if first:
-        user_input = "What is 10+12?"
-        #test_tracer_format.show['llmcall'] = True
-        first=False
-    else:
-        user_input = input(">>>> ")
+    user_input = input(">>>> ")
 
     if user_input == "":
         continue
@@ -83,7 +72,7 @@ while True:
         if user_input.startswith('//1'):
             user_input = '/eval -agents reactly llama-react -tests hotpot/train:100:5'
         if user_input.startswith('//2'):
-            user_input = '/eval -agents reactly llama-react -tests qa/wiki1:0:5'
+            user_input = '/eval -agents reactly llama-react -tests qa/wikipedia-1:0:2'
 
         if user_input.startswith("/eval ") or user_input.startswith("/e "):
             argstr = user_input.split(maxsplit=1)
