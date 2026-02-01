@@ -62,6 +62,7 @@ _tool_runs_format = make_format(
     [{'tool': 'name of tool', 'input': 'input to tool (does not have to be a string)', 'result': 'the output of the tool run'}],
 )
 
+_answer_format = make_format('The answer of the Task.', label='Answer', is_plain_text=True)
 
 
 
@@ -299,18 +300,17 @@ _try_answer_task_stage = make_stage(
     """You are a answer generator of an agent.\nYour job is to Answer a Task only using the information from the Results.""",
     rules = OBJECTIVITY_RULES + [
         "Do NOT invent any facts or missing information.",
-        "Answer in the same language as the Task."
     ],
     inputs = [
+        ('Results', _tool_runs_format),
         ('Task', _task_description_format),
-        ('Results', _tool_runs_format)
     ],
-    output=('Answer', make_format({'answer': 'The answer of the Task', 'satisfaction': 0.12, 'reason': "Why the answer can't fully satisfy the Task. (This attribute can be ommitted when satisfaction is high.)"})),
+    output=_answer_format,
     good_examples=[
         {
             'Task': "Find the names of daughter and brother of Joe.", 
             'Results': [{'tool': 'people_tool', 'input': 'Joe', 'result': {'name': 'Joe', 'brother': 'Maximilian'}}], 
-            'Answer': {'answer': 'The brother of Joe is Maximilian.', 'satisfaction': 0.4, 'reason': 'The name of the daugther is missing.'},
+            'Answer': 'The brother of Joe is Maximilian.'
         },
         {
             'Task': "Who wrote The Blue-Pink Song?", 
@@ -318,7 +318,7 @@ _try_answer_task_stage = make_stage(
                 {'tool': 'song_db', 'input': 'The Blue-Pink Song', 'result': {'title': 'The Blue-Pink Song', 'author': 'Helene Josh'}},
                 {'tool': 'music_tool', 'input': {'search': 'The Blue-Pink Song'}, 'result': {'work': 'The Blue-Pink Song', 'author': 'Laura Taylor'}}
             ], 
-            'Answer': {'answer': 'The Blue-Pink Song was probably written by Helene Josh or Laura Taylor.', 'satisfaction': 0.35, 'reason': 'The results contradict each other regarding the author.'},
+            'Answer': 'The Blue-Pink Song was probably written by Helene Josh or Laura Taylor.'
         },
         {
             'Task': "Determine the sensor size of a A123-camera.", 
@@ -326,7 +326,7 @@ _try_answer_task_stage = make_stage(
                 {'tool': 'tech_lookup', 'input': {'topic': 'cameras', 'model': 'A123'}, 'result': {'full_name': 'Ycam Solo A123', 'weight_kg': 1.5, 'sensor_size': 'full-frame'}},
                 {'tool': 'some_geo_tool', 'input': 'A123', 'result': 'The highway A123 in Australia connects cities in the north and south.'},
             ], 
-            'Answer': {'answer': "The A123-camera uses a 'full-frame' sized sensor.", 'satisfaction': 0.9},
+            'Answer': "The A123-camera uses a 'full-frame' sized sensor."
         },
         {
             'Task': "What movie stares Mike Simon in the role of Roy.", 
@@ -336,13 +336,59 @@ _try_answer_task_stage = make_stage(
                     {'page': 'Finish Winter Comes Back (movie)', 'text': "Finish Winter Comes Back is an action thriller, where a teenager called 'Roy' breaks into his own home."},
                 ]}
             ], 
-            'Answer': {'answer': "The movie 'Finish Winter Comes Back' probably starres Mike Simon.", 'satisfaction': 0.24, 'reason': 'Results ambiguous about requested information.'},
+            'Answer': "The movie 'Finish Winter Comes Back' probably starres Mike Simon."
         },
     ],
     tries = 2
 )
 
-def try_answer(task_description: str, results: List[ToolRunRecord], llm: LLM, tracer: Tracer) -> Answer:
+def try_answer(task_description: str, results: List[ToolRunRecord], llm: LLM, tracer: Tracer) -> str:
+    return run_stage(_try_answer_task_stage, {'Task': task_description, 'Results': results}, llm, tracer)
+
+
+
+
+
+
+_rate_task_answer_stage = make_stage(
+    'rate_task_answer',
+    """You are an Answer rater of an agent.\nYour job is to rate an Answer for a given Task with a satisfaction score between 0 and 1.""",
+    rules = OBJECTIVITY_RULES + [
+        "Do not answer the Task."
+    ],
+    inputs = [
+        ('Task', _task_description_format),
+        ('Answer', _tool_runs_format),
+    ],
+    output=('Rating', make_format({'satisfaction': 0.12, 'reason': "Why the answer can't fully satisfy the Task. (This attribute can be ommitted when satisfaction is high.)"})),
+    good_examples=[
+        {
+            'Task': "Find the names of daughter and brother of Joe.", 
+            'Answer': 'The brother of Joe is Maximilian.',
+            'Rating': {'satisfaction': 0.4, 'reason': 'The name of the daugther is missing.'},
+        },
+        {
+            'Task': "Who wrote The Blue-Pink Song?", 
+            'Answer': 'The Blue-Pink Song was probably written by Helene Josh or Laura Taylor.',
+            'Rating': {'satisfaction': 0.35, 'reason': 'The results contradict each other regarding the author.'},
+        },
+        {
+            'Task': "Determine the sensor size of a A123-camera.", 
+            'Answer': "The A123-camera uses a 'full-frame' sized sensor.",
+            'Rating': {'satisfaction': 0.9},
+        },
+        {
+            'Task': "What movie stares Mike Simon in the role of Roy.", 
+            'Answer': "The movie 'Finish Winter Comes Back' probably starres Mike Simon.",
+            'Rating': {'satisfaction': 0.24, 'reason': 'Results ambiguous about requested information.'},
+        },
+    ],
+    tries = 2
+)
+
+def rate_task_answer(task_description: str, answer: str, llm: LLM, tracer: Tracer) -> int:
     def post_process(output: Dict[str, str|float]) -> Answer:
-        return Answer(output['answer'], output.get('satisfaction', 0.0), reason=output.get('reason', ''))
-    return run_stage(_try_answer_task_stage, {'Task': task_description, 'Results': results}, llm, tracer, post_fn=post_process)
+        return output.get('satisfaction', 0.0)
+    return run_stage(_rate_task_answer_stage, {'Task': task_description, 'Answer': answer}, llm, tracer, post_fn=post_process)
+
+
