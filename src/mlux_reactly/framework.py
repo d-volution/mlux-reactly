@@ -13,6 +13,7 @@ class FormatDescr:
     default: Any
     preshape_fn: Callable[[Any], Any] | None
     preshape_requires_type: type|None
+    is_plain_text: bool
     label: str
 
     def as_list(self, label: str = '', *, add_rules: List[str] = []):
@@ -23,6 +24,7 @@ class FormatDescr:
             if self.preshape_fn is not None else None,
             preshape_requires_type=list,
             default=[],
+            is_plain_text=False,
             label=label
         )
 
@@ -36,6 +38,7 @@ def make_format(
         default: Any = None,
         preshape_fn: Callable[[Any], Any] | None = None,
         preshape_requires_type: type|None = None,
+        is_plain_text: bool = False,
         label: str = ""
     ) -> FormatDescr:
     return FormatDescr(
@@ -44,6 +47,7 @@ def make_format(
         default=default,
         preshape_fn=preshape_fn,
         preshape_requires_type=preshape_requires_type,
+        is_plain_text=is_plain_text,
         label=label,
     )
 
@@ -99,7 +103,7 @@ def make_json_serializable(data: Any):
 
 def serialize_data(data) -> str:
     serializable = make_json_serializable(data)
-    return json.dumps(serializable)
+    return json.dumps(serializable, ensure_ascii=False)
 
 
 def format_data_explicit(data, preshape_fn: Callable[[Any], Any] | None, *, ctx: str = "", preshape_required: bool = True) -> str:
@@ -243,7 +247,13 @@ def run_stage(stage: Stage, input_data: Dict[str, Any], llm: LLM, tracer: Tracer
             err_reason_code = 'llm'
             llm_response = call_llm(stage.static_prompt, conversation_section, llm, tracer=try_tracer)
             err_reason_code = 'json_parsing'
-            parsed_result = json.loads(llm_response)
+            try:
+                parsed_result = json.loads(llm_response)
+            except Exception as e:
+                if stage.output_format.is_plain_text:
+                    return llm_response
+                else:
+                    raise e
 
             err_reason_code = 'post_processing'
             if post_fn is not None:
