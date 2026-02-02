@@ -48,6 +48,35 @@ print(f"agent answer: {answer}")
 
 ---
 
+## How to trace
+
+Use LIVE_VERBOSE for printing the most important events live:
+```python
+from mlux_reactly.test_tracer import TestTracer, LIVE_VERBOSE
+# ...
+agent = ReactlyAgent(tracer=TestTracer(live_format=LIVE_VERBOSE))
+```
+
+Or to print only `toolrun`s and `result`s without highlight colours live:
+```python
+from mlux_reactly.test_tracer import TestTracer, FormatConfig
+# ...
+agent = ReactlyAgent(tracer=TestTracer(live_format=FormatConfig(show=['toolrun', 'result'], colored=False)))
+```
+
+### These are the existing events:
+|key|description|
+|-|-|
+|query|an `agent.query()` call|
+|task|subtask the query is splitted into|
+|stage|a stage doing a LLM call with one specific prompt. If it fails, it might retry resulting in multiple LLM calls.|
+|llmcall|a single call of the LLM. Only shows up in trace if not in compact mode| 
+|toolrun|The invocation of a user-supplied tool|
+|root|Root node of tracer|
+|failed|Some step/operation that failed|
+|result|The operation of the parent event finished with some result|
+
+
 ## When running from Git Repo
 
 ### Run simple chatbot
