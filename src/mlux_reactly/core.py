@@ -14,7 +14,7 @@ def run_tool(tool: Tool, input: Dict[str, Any], caller_tracer: Tracer) -> Any:
     tracer = caller_tracer.on("toolrun", {'tool': tool})
     try:
         result = tool.run(**input)
-        tracer.on("complete", {'result': result})
+        tracer.on("result", {'result': result})
     except Exception as e:
         result = f"tool failed: {e}"
         tracer.on("failed", {'result': result, 'exception': e})
@@ -60,6 +60,6 @@ def run_query(user_question: str, history: List[ChatQA], tools: List[Tool], llm:
                 proposed_task_answers.append(TaskResult(task.description, task_answer, satisfaction))
                 task = Task(enhance_task_description(original_task.description, proposed_task_answers, llm, tracer))
         
-    answer = try_answer(enhanced_user_question, [ToolRunRecord('subtask', t.task, t.result) for t in task_results], llm, query_tracer)
-    query_tracer.on('complete', {'result': answer})
+    answer = str(try_answer(enhanced_user_question, [ToolRunRecord('subtask', t.task, t.result) for t in task_results], llm, query_tracer))
+    query_tracer.on('result', {'result': answer})
     return answer

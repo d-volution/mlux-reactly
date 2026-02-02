@@ -4,7 +4,7 @@ import json
 
 from mlux_reactly import ReactlyAgent, LLM, ZeroTracer
 from tools import calculator, text_count, make_rag_for_folder, wikipedia_search
-from test_tracer import TestTracer, make_json_serializable, format_tracer, format_tracer_with_nr, FormatConfig, TraceConfig
+from mlux_reactly.test_tracer import TestTracer, make_json_serializable, format_tracer, format_tracer_with_nr, FormatConfig, TraceConfig
 from eval import main_eval, args_to_eval_runs, EvalRun
 
 record_file = open("reactly_query_record.jsonl", "+a")
@@ -49,12 +49,6 @@ while True:
             elif cmds[1] == "llm:off":
                 test_tracer_format.show['llmcall'] = False
                 print('-- showing llmcall off')
-            elif cmds[1] == "compact":
-                test_tracer_format.compact = True
-                print('-- showing compact on')
-            elif cmds[1] == "verbose":
-                test_tracer_format.compact = False
-                print('-- showing compact off')
             elif cmds[1] == "dump":
                 print(format_tracer(tracer, test_tracer_format))
             elif cmds[1] == "show":

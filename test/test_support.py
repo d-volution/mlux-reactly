@@ -4,7 +4,7 @@ import time
 import math
 from hotpot_based_evaluation import eval_results, Result
 from mlux_reactly import LLM, Tracer
-from test_tracer import TestTracer
+from mlux_reactly.test_tracer import TestTracer
 from test_types import Agent, AgentContructor, Example, ExampleCase
 
 

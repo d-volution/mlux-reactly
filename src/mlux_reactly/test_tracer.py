@@ -7,7 +7,7 @@ import json
 from mlux_reactly import Tracer, Tool
 
 
-
+SHOW_ALL = '_all'
 
 @dataclass
 class Event:
@@ -16,6 +16,7 @@ class Event:
     sub: List["Event"]
     time: datetime
     nr: int
+    level: int = 0
     endtime: datetime|None = None
 
     def as_dict(self) -> Dict:
@@ -25,18 +26,18 @@ class Event:
 class FormatConfig:
     colored: bool = True
     compact: bool = True
-    show: Dict[str, bool] = field(default_factory=dict)
-    show_other: bool = True
+
+    # a list of all event keys to show. Events with keys not in this list will be hidden, except if SHOW_ALL is in list 
+    show: List[str] = field(default_factory=lambda: [SHOW_ALL])
 
 
 @dataclass
 class TraceConfig:
     session: str
     record_file: TextIOWrapper|None = None
-    live_format: FormatConfig = FormatConfig(show_other=False)
+    live_format: FormatConfig = FormatConfig(show=[])
 
-known_init_keys = ['stage', 'task', 'llmcall', 'toolrun']
-
+LIVE_VERBOSE = FormatConfig(show=['query', 'stage', 'task', 'toolrun', 'llmcall', 'failed', 'result'])
 
 ########################
 
@@ -81,17 +82,24 @@ def format_failed_event_msg(event: Event) -> str:
         f", {tries} tries" if tries else '',
         f", errtype {error_type}" if error_msg else ''
     ]
-    return ''.join(parts)# + f"\n{"".join(traceback.format_exception(event.args.get('exception', ValueError('no exception'))))}"
+    return ''.join(parts)
 
 
-def _format_text(prefix: str, text: str) -> str:
+def _format_text_manyline(prefix: str, text: str) -> str:
     return f"{prefix}{text.replace('\n', '\n'+prefix)}\n"
 
-def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = FormatConfig()) -> str:
+def _format_text_fewline(line_prefix: str, text: str) -> str:
+    return f"{text.replace('\n', '\n'+line_prefix)}"
+
+def should_show(key: str, show_list: List[str]) -> bool:
+    return (SHOW_ALL in show_list or key in show_list)
+
+def format_event(event: Event, *, level: int|None = None, format_config: FormatConfig = FormatConfig(show=[SHOW_ALL]), parent_key: str = "") -> str:
     lines = []
     key = event.key
+    level = level if level is not None else event.level
 
-    if not (format_config.show_other or format_config.show.get(key, False)):
+    if not should_show(key, format_config.show) or (key == 'result' and not should_show(parent_key, format_config.show)):
         return
 
     RESET = '\033[0m'
@@ -116,10 +124,10 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
         headline = f"{ERRCOLOR}{"  "*level}* retry: {arg_nr}{RESET}"
     elif key == 'llmcall':
         if not format_config.compact:
-            details += _format_text('    => ', str(event.args.get('sys_prompt', '<--- sys prompt not available --->')))
-            details += _format_text('    -> ', str(event.args.get('prompt', '<--- prompt not available --->')))
-    elif key == 'complete':
-        details += _format_text('    -> ', str(event.args.get('result', '<--- prompt not available --->')))
+            details += _format_text_manyline('    => ', str(event.args.get('sys_prompt', '<--- sys prompt not available --->')))
+            details += _format_text_manyline('    -> ', str(event.args.get('prompt', '<--- prompt not available --->')))
+    elif key == 'result':
+        headline += ': ' + _format_text_fewline('    -> ', str(event.args.get('result', '<--- prompt not available --->')))
     elif key == 'failed':
         headline = f"{ERRCOLOR}{headline}: {format_failed_event_msg(event)}{RESET}"
 
@@ -130,7 +138,7 @@ def format_event(event: Event, *, level: int = 0, format_config: FormatConfig = 
 
     for ev in event.sub:
         nextlevel = level+1
-        if ev.key in ['complete', 'llmcall'] and not (format_config.show.get(ev.key, False) or not format_config.compact):
+        if ev.key in ['result', 'llmcall'] and not (ev.key in format_config.show or not format_config.compact):
             continue
         if ev.key in ['try']:
             nextlevel=level
@@ -184,24 +192,28 @@ class TestTracer(Tracer):
     event: Event
     root_tracer: 'TestTracer'
     event_count: int = 0
+    _prevent_print_live: bool = False
 
     def __init__(self, *, 
                  config: TraceConfig|None = None, 
                  event: Event|None = None,
                  root_tracer: Optional['TestTracer'] = None,
                  session: str|None = None,
-                 record_file: TextIOWrapper|None = None):
+                 record_file: TextIOWrapper|None = None,
+                 live_format: FormatConfig = FormatConfig(show=[]),
+                 _prevent_print_live: bool = False):
         self.event = event or Event("root", {}, sub=[], time=datetime.now(), nr=0)
-        self.config = config or TraceConfig(session=session or f"default", record_file=record_file)
+        self.config = config or TraceConfig(session=session or f"default", record_file=record_file, live_format=live_format)
         self.root_tracer = root_tracer or self
+        self._prevent_print_live = _prevent_print_live
 
     def on(self, key: str, args: Dict[str, Any]) -> "TestTracer":
         time = datetime.now()
-        event = Event(key, args, [], time, nr=self.root_tracer.event_count)
+        event = Event(key, args, [], time, nr=self.root_tracer.event_count, level=self.event.level+1)
         self.root_tracer.event_count += 1
         self.event.sub.append(event)
 
-        if key == 'complete':
+        if key == 'result':
             self.add_arg('result', args.get('result'))
             if self.event.key == 'query':
                 self._record_to_file()
@@ -209,11 +221,13 @@ class TestTracer(Tracer):
         if key == 'failed':
             self.root_tracer.event.args['flag_has_failed_event'] = True
 
-        live_out = format_event(event, format_config=self.config.live_format)
-        if live_out:
-            print(live_out)
+        if True or not self._prevent_print_live:
+            live_out = format_event(event, format_config=self.config.live_format, parent_key=self.event.key)
+            if live_out:
+                print(live_out)
 
-        return TestTracer(config=self.config, event=event, root_tracer=self.root_tracer)
+        return TestTracer(config=self.config, event=event, root_tracer=self.root_tracer, 
+                          _prevent_print_live=self._prevent_print_live or not should_show(key, self.config.live_format.show))
     
     def add_arg(self, arg_name: str, arg: Any):
         self.event.args[arg_name] = arg

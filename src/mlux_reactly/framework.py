@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict, is_dataclass, replace, field
 from enum import Enum
 import json
 import ollama
-from .types import LLM, Tracer, ZeroTracer, _UNUSED_sentinel
+from .types import LLM, Tracer, _UNUSED_sentinel
 
 
 @dataclass
@@ -69,21 +69,12 @@ def call_llm(sys_prompt: str, conversation_section: str, llm: LLM, *, tracer: Tr
     if sys_prompt:
         messages.append({'role': 'system', 'content': sys_prompt})
     messages.append({'role': 'user','content': conversation_section})
-
-
-    #print(f"<----PROMPT VON HIER>{conversation_section}<----PROMPT BIS HIER>")
-
-
-
     response_ollama = ollama.chat(
             model=llm.model,
             messages=messages,
     )
     response_content = str(response_ollama["message"]["content"])
-    #print(f"<----VON HIER>{'<-|||->'.join([m['content'] for m in messages])}<----BIS HIER>")
-    
-
-    tracer.on('complete', {'result': response_content})
+    tracer.on('result', {'result': response_content})
     return response_content
 
 
@@ -160,8 +151,6 @@ def generate_static_prompt(
 
     all_rules = [
         "Output valid JSON. No extra text!",
-        #"Output a single line of valid JSON. No extra text!",
-        #"STRICTLY follow the Format!"
     ]
     all_rules.extend(rules)
     for input in inputs:
@@ -260,7 +249,7 @@ def run_stage(stage: Stage, input_data: Dict[str, Any], llm: LLM, tracer: Tracer
                 result = post_fn(parsed_result)
             else:
                 result = parsed_result
-            tracer.on('complete', {'result': result})
+            tracer.on('result', {'result': result})
             return result
         except Exception as e:
             last_err = e
