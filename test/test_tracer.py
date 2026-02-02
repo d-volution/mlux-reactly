@@ -57,10 +57,15 @@ def make_json_serializable(data: Any):
         return make_json_serializable(data.tolist())
     return str(data)
 
-def format_json_line(data: Any):
+def format_json_line(data: Any, keep_length_max: int = 500):
     if data is None:
         return ""
-    return json.dumps(make_json_serializable(data), ensure_ascii=False)
+    j = json.dumps(make_json_serializable(data), ensure_ascii=False)
+    half_length = int(keep_length_max/2)
+    if len(j) > keep_length_max:
+        return f"{j[:half_length]}.....{j[len(j)-half_length]:}"
+    else:
+        return j
 
 
 def format_failed_event_msg(event: Event) -> str:
