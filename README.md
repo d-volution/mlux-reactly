@@ -52,14 +52,14 @@ print(f"agent answer: {answer}")
 
 Use LIVE_VERBOSE for printing the most important events live:
 ```python
-from mlux_reactly.test_tracer import TestTracer, LIVE_VERBOSE
+from mlux_reactly.tracer import TestTracer, LIVE_VERBOSE
 # ...
 agent = ReactlyAgent(tracer=TestTracer(live_format=LIVE_VERBOSE))
 ```
 
 Or to print only `toolrun`s and `result`s without highlight colours live:
 ```python
-from mlux_reactly.test_tracer import TestTracer, FormatConfig
+from mlux_reactly.tracer import TestTracer, FormatConfig
 # ...
 agent = ReactlyAgent(tracer=TestTracer(live_format=FormatConfig(show=['toolrun', 'result'], colored=False)))
 ```
