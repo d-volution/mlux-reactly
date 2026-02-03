@@ -7,7 +7,6 @@ import os
 from mlux_reactly import LLM, Tracer
 from test_types import Example, ExampleCase, AgentConfig, AgentContructor, at_or
 from test_support import run_hotpotlike_examples
-from test_tracer import TestTracer
 from tools import calculator, text_count, wikipedia_search, make_rag_for_documents, Document
 
 

@@ -1,10 +1,9 @@
-from typing import List, Protocol, Type, Dict, Tuple
+from typing import List, Dict, Tuple
 import inspect
 import time
 import math
 from hotpot_based_evaluation import eval_results, Result
 from mlux_reactly import LLM, Tracer
-from mlux_reactly.test_tracer import TestTracer
 from test_types import Agent, AgentContructor, Example, ExampleCase
 
 

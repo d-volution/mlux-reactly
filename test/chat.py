@@ -3,8 +3,8 @@ import traceback
 import json
 
 from mlux_reactly import ReactlyAgent, LLM, ZeroTracer
+from mlux_reactly.tracer import TestTracer, make_json_serializable, format_tracer, format_tracer_with_nr, FormatConfig
 from tools import calculator, text_count, make_rag_for_folder, wikipedia_search
-from mlux_reactly.test_tracer import TestTracer, make_json_serializable, format_tracer, format_tracer_with_nr, FormatConfig, TraceConfig
 from eval import main_eval, args_to_eval_runs, EvalRun
 
 record_file = open("reactly_query_record.jsonl", "+a")

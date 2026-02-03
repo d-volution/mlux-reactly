@@ -1,8 +1,7 @@
 from dataclasses import dataclass, asdict, is_dataclass, field
-import traceback
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from io import StringIO, TextIOWrapper
+from io import TextIOWrapper
 import json
 from mlux_reactly import Tracer, Tool
 
