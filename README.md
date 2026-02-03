@@ -79,6 +79,11 @@ agent = ReactlyAgent(tracer=TestTracer(live_format=FormatConfig(show=['toolrun',
 
 ## When running from Git Repo
 
+### Local Install
+```sh
+pip install -r requirements.txt
+```
+
 ### Run simple chatbot
 ```sh
 python3 test/chat.py
